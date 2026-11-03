@@ -373,13 +373,13 @@ function createIsland() {
   terrainGeometry.computeVertexNormals();
   terrainGeometry.computeBoundingSphere();
 
-  const terrainMaterial =
-    new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 1,
-      metalness: 0
-        side: THREE.DoubleSide
-    });
+const terrainMaterial =
+  new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 1,
+    metalness: 0,
+    side: THREE.DoubleSide
+  });
 
   terrainMesh = new THREE.Mesh(
     terrainGeometry,
