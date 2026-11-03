@@ -1,153 +1,156 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import RAPIER from "@dimforge/rapier3d-compat";
 
 /* =========================================================
-   DINOSAUR PARK — PROTOTYPE 01
-
-   SYSTEMS:
-   1. Island terrain
-   2. Vegetation
-   3. Camera
-   4. Terrain editing
-
+   WORLD SETTINGS
    ========================================================= */
-
-/* =========================================================
-   DOM ELEMENTS
-   ========================================================= */
-
-const container = document.getElementById("scene-container");
-
-const loadingScreen = document.getElementById("loading-screen");
-const loadingProgress = document.getElementById("loading-progress");
-const loadingMessage = document.getElementById("loading-message");
-
-const enterButton = document.getElementById("enter-button");
-const introPanel = document.getElementById("intro-panel");
-const controlsHint = document.getElementById("controls-hint");
-
-const statusText = document.getElementById("status-text");
-
-const brushSizeInput = document.getElementById("brush-size");
-const brushStrengthInput = document.getElementById("brush-strength");
-
-const brushSizeValue = document.getElementById("brush-size-value");
-const brushStrengthValue = document.getElementById("brush-strength-value");
-
-const resetTerrainButton = document.getElementById("reset-terrain");
-const toolDescription = document.getElementById("tool-description");
-
-const toolButtons = document.querySelectorAll(".tool-button");
-
-/* =========================================================
-   GLOBAL VARIABLES
-   ========================================================= */
-
-let scene;
-let camera;
-let renderer;
-let controls;
-let clock;
-
-let islandGroup;
-let water;
-
-let terrainMesh;
-let terrainFollowingObjects = [];
-let originalTerrainHeights;
-
-let brushPreview;
-
-let animationFrameId;
-
-let activeTool = "camera";
-
-let brushRadius = 10;
-let brushStrength = 1.5;
-
-let isEditing = false;
-let activePointerId = null;
-
-let flattenTargetHeight = 0;
-
-let lastBrushTime = 0;
-
-const raycaster = new THREE.Raycaster();
-const pointer = new THREE.Vector2();
 
 const WORLD = {
   islandRadius: 216,
-  terrainSegments: 270,
+  terrainSegments: 240,
   waterLevel: 0,
-  treeCount: 210,
+
+  treeCount: 420,
+  bushCount: 180,
 
   maximumTerrainHeight: 40,
   minimumTerrainHeight: -3
 };
 
+let scene;
+let camera;
+let renderer;
+let controls;
+
+let terrainGeometry;
+let terrainMesh;
+let originalTerrainHeights;
+
+let vegetationGroup;
+let terrainFollowingObjects = [];
+
+let waterMesh;
+let brushRing;
+
+let physicsWorld;
+let terrainBody;
+let terrainCollider;
+
+let physicsObjects = [];
+
+let currentTool = "camera";
+let brushSize = 12;
+let brushStrength = 1.5;
+
+let isSculpting = false;
+let terrainChanged = false;
+let flattenTarget = 0;
+let lastBrushTime = 0;
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+const clock = new THREE.Clock();
+
+let accumulator = 0;
+const FIXED_STEP = 1 / 60;
+
+/* =========================================================
+   MATERIALS
+   ========================================================= */
+
+const trunkMaterial = new THREE.MeshStandardMaterial({
+  color: 0x765037,
+  roughness: 1
+});
+
+const leafMaterials = [
+  new THREE.MeshStandardMaterial({
+    color: 0x426b3e,
+    roughness: 1
+  }),
+  new THREE.MeshStandardMaterial({
+    color: 0x527c45,
+    roughness: 1
+  }),
+  new THREE.MeshStandardMaterial({
+    color: 0x345b39,
+    roughness: 1
+  })
+];
+
+const bushMaterials = [
+  new THREE.MeshStandardMaterial({
+    color: 0x3d673e,
+    roughness: 1
+  }),
+  new THREE.MeshStandardMaterial({
+    color: 0x547b45,
+    roughness: 1
+  })
+];
+
 /* =========================================================
    INITIALIZATION
    ========================================================= */
 
-init();
+async function startApplication() {
+  try {
+    initializeThree();
 
-function init() {
-  setLoading(12, "Preparing the scene...");
+    await RAPIER.init();
 
-  createScene();
+    initializePhysics();
 
-  setLoading(30, "Creating the island...");
+    createIsland();
+    createVegetation();
+    createBrushPreview();
 
-  createLighting();
-  createWater();
-  createIsland();
+    setupUI();
+    setupTerrainEditing();
 
-  setLoading(65, "Growing the forest...");
+    updatePhysicsStatus(true);
 
-  createVegetation();
-  createAtmosphere();
+    document
+      .getElementById("loading-screen")
+      .classList.add("hidden");
 
-  createBrushPreview();
-  createControls();
+    animate();
 
-  setupTerrainEditor();
+  } catch (error) {
+    console.error("Initialization failed:", error);
 
-  setLoading(100, "Island ready.");
-
-  clock = new THREE.Clock();
-
-  addEventListeners();
-
-  animate();
-
-  window.setTimeout(() => {
-    loadingScreen.classList.add("done");
-  }, 450);
+    document.getElementById("loading-screen").innerHTML =
+      `<div class="loading-title">WORLD FAILED TO LOAD</div>
+       <div class="loading-subtitle">${error.message}</div>`;
+  }
 }
 
 /* =========================================================
-   SCENE AND RENDERER
+   THREE.JS SCENE
    ========================================================= */
 
-function createScene() {
+function initializeThree() {
   scene = new THREE.Scene();
 
-  scene.background = new THREE.Color(0x9bb8b0);
+  scene.background = new THREE.Color(0x9ab8b6);
 
-  scene.fog = new THREE.FogExp2(
-    0x9bb8b0,
-    0.0028
+  scene.fog = new THREE.Fog(
+    0x9ab8b6,
+    500,
+    1500
   );
 
   camera = new THREE.PerspectiveCamera(
-    48,
+    55,
     window.innerWidth / window.innerHeight,
     0.1,
-    1000
+    5000
   );
 
-  camera.position.set(112, 105, 145);
+  camera.position.set(0, 310, 430);
 
   renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -164,95 +167,92 @@ function createScene() {
   );
 
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  renderer.shadowMap.type =
-    THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
 
-  renderer.outputColorSpace =
-    THREE.SRGBColorSpace;
+  document
+    .getElementById("scene-container")
+    .appendChild(renderer.domElement);
 
-  renderer.toneMapping =
-    THREE.ACESFilmicToneMapping;
+  controls = new OrbitControls(
+    camera,
+    renderer.domElement
+  );
 
-  renderer.toneMappingExposure = 1.12;
+  controls.target.set(0, 0, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
 
-  container.appendChild(renderer.domElement);
+  controls.minDistance = 30;
+  controls.maxDistance = 1200;
+  controls.maxPolarAngle = Math.PI * 0.49;
 
-  renderer.domElement.style.touchAction = "none";
-
-  islandGroup = new THREE.Group();
-
-  scene.add(islandGroup);
-}
-
-/* =========================================================
-   LIGHTING
-   ========================================================= */
-
-function createLighting() {
-  const hemiLight = new THREE.HemisphereLight(
-    0xd9efff,
-    0x43523b,
+  const ambientLight = new THREE.HemisphereLight(
+    0xe4f0dc,
+    0x58634b,
     2.0
   );
 
-  scene.add(hemiLight);
+  scene.add(ambientLight);
 
-  const sunLight = new THREE.DirectionalLight(
-    0xffedcf,
+  const sun = new THREE.DirectionalLight(
+    0xffe7bd,
     3.0
   );
 
-  sunLight.position.set(-90, 150, 75);
+  sun.position.set(-250, 400, -150);
+  sun.castShadow = true;
 
-  sunLight.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
 
-  sunLight.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -400;
+  sun.shadow.camera.right = 400;
+  sun.shadow.camera.top = 400;
+  sun.shadow.camera.bottom = -400;
 
-  sunLight.shadow.camera.left = -115;
-  sunLight.shadow.camera.right = 115;
-  sunLight.shadow.camera.top = 115;
-  sunLight.shadow.camera.bottom = -115;
+  scene.add(sun);
 
-  sunLight.shadow.normalBias = 0.035;
-
-  scene.add(sunLight);
+  window.addEventListener("resize", onWindowResize);
 }
 
 /* =========================================================
-   WATER
+   RAPier PHYSICS
    ========================================================= */
 
-function createWater() {
-  const geometry = new THREE.PlaneGeometry(
-    1200,
-    1200
-  );
-
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x397f83,
-    roughness: 0.32,
-    metalness: 0.08,
-    transparent: true,
-    opacity: 0.96
+function initializePhysics() {
+  physicsWorld = new RAPIER.World({
+    x: 0,
+    y: -9.81,
+    z: 0
   });
 
-  water = new THREE.Mesh(
-    geometry,
-    material
-  );
-
-  water.rotation.x = -Math.PI / 2;
-
-  water.position.y = WORLD.waterLevel - 0.12;
-
-  water.receiveShadow = true;
-
-  scene.add(water);
+  physicsWorld.timestep = FIXED_STEP;
 }
 
 /* =========================================================
-   ISLAND TERRAIN
+   TERRAIN COLORS
+   ========================================================= */
+
+function getTerrainColor(height, color) {
+  if (height < 0.2) {
+    color.set(0xc2b58d);
+  } else if (height < 4) {
+    color.set(0x91a86a);
+  } else if (height < 15) {
+    color.set(0x668b50);
+  } else if (height < 25) {
+    color.set(0x54794a);
+  } else {
+    color.set(0x777d69);
+  }
+
+  return color;
+}
+
+/* =========================================================
+   TERRAIN GENERATION
    ========================================================= */
 
 function createIsland() {
@@ -279,12 +279,14 @@ function createIsland() {
 
   const color = new THREE.Color();
 
+  const islandScale =
+    WORLD.islandRadius / 72;
+
   for (let i = 0; i < positions.count; i++) {
     const x = positions.getX(i);
     const z = positions.getZ(i);
 
     const radius = Math.sqrt(x * x + z * z);
-
     const angle = Math.atan2(z, x);
 
     const edgeNoise =
@@ -303,36 +305,32 @@ function createIsland() {
       7,
       edgeDistance
     );
-  
-    // Scale landscape features with island size
-    const islandScale = WORLD.islandRadius / 72;
 
-    const terrainX = x / islandScale;
-    const terrainZ = z / islandScale;
+    const tx = x / islandScale;
+    const tz = z / islandScale;
 
     const hillA = gaussian(
-      terrainX, terrainZ, -22, -14, 25, 31, 14
+      tx, tz, -22, -14, 25, 31, 14
     );
 
     const hillB = gaussian(
-      terrainX, terrainZ, 20, 7, 22, 25, 10
+      tx, tz, 20, 7, 22, 25, 10
     );
 
     const hillC = gaussian(
-      terrainX, terrainZ, -2, 32, 18, 19, 6
+      tx, tz, -2, 32, 18, 19, 6
     );
 
     const ridge =
       Math.max(
         0,
-        Math.sin((terrainX + terrainZ * 0.55) * 0.055)
+        Math.sin((tx + tz * 0.55) * 0.055)
       ) * 2.0;
 
     const smallNoise =
-      Math.sin(terrainX * 0.19) *
-      Math.cos(terrainZ * 0.17) * 0.65 +
-      Math.sin((terrainX + terrainZ) * 0.31) * 0.28;
-
+      Math.sin(tx * 0.19) *
+      Math.cos(tz * 0.17) * 0.65 +
+      Math.sin((tx + tz) * 0.31) * 0.28;
 
     const landHeight =
       1.4 +
@@ -356,7 +354,7 @@ function createIsland() {
 
     const variation =
       0.94 +
-      Math.sin(x * 0.37 + z * 0.21) * 0.035;
+      Math.sin(x * 0.037 + z * 0.021) * 0.035;
 
     color.multiplyScalar(variation);
 
@@ -373,36 +371,73 @@ function createIsland() {
   );
 
   terrainGeometry.computeVertexNormals();
+  terrainGeometry.computeBoundingSphere();
 
-  const material = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 1,
-    metalness: 0
-  });
+  const terrainMaterial =
+    new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 1,
+      metalness: 0
+    });
 
   terrainMesh = new THREE.Mesh(
     terrainGeometry,
-    material
+    terrainMaterial
   );
 
   terrainMesh.receiveShadow = true;
   terrainMesh.castShadow = true;
 
-  islandGroup.add(terrainMesh);
+  scene.add(terrainMesh);
 
-  // Shoreline
+  createOcean();
+  createShoreline();
 
+  rebuildTerrainCollider();
+}
+
+/* =========================================================
+   OCEAN AND SHORELINE
+   ========================================================= */
+
+function createOcean() {
+  const waterGeometry = new THREE.PlaneGeometry(
+    1600,
+    1600
+  );
+
+  waterGeometry.rotateX(-Math.PI / 2);
+
+  const waterMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0x397f91,
+      roughness: 0.28,
+      metalness: 0.08
+    });
+
+  waterMesh = new THREE.Mesh(
+    waterGeometry,
+    waterMaterial
+  );
+
+  waterMesh.position.y = -3.8;
+
+  scene.add(waterMesh);
+}
+
+function createShoreline() {
   const shoreGeometry = new THREE.RingGeometry(
     WORLD.islandRadius - 1.5,
     WORLD.islandRadius + 5.5,
-    128
+    180
   );
 
-  const shoreMaterial = new THREE.MeshStandardMaterial({
-    color: 0xc3b78d,
-    roughness: 1,
-    side: THREE.DoubleSide
-  });
+  const shoreMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xc3b78d,
+      roughness: 1,
+      side: THREE.DoubleSide
+    });
 
   const shore = new THREE.Mesh(
     shoreGeometry,
@@ -412,700 +447,115 @@ function createIsland() {
   shore.rotation.x = -Math.PI / 2;
   shore.position.y = 0.06;
 
-  islandGroup.add(shore);
+  scene.add(shore);
 }
 
 /* =========================================================
-   TERRAIN COLORS
+   TERRAIN HEIGHT QUERY
+   Reads the actual edited terrain vertices.
    ========================================================= */
 
-function getTerrainColor(height, targetColor) {
-  const sandColor = 0xb6a477;
-  const grassLow = 0x536f43;
-  const grassMid = 0x66864b;
-  const grassHigh = 0x82945a;
-  const rockColor = 0x77796a;
-
-  if (height < 0.2) {
-    targetColor.setHex(sandColor);
-  } else if (height > 17) {
-    targetColor.setHex(rockColor);
-  } else if (height > 9) {
-    targetColor.setHex(grassHigh);
-  } else if (height > 3.5) {
-    targetColor.setHex(grassMid);
-  } else {
-    targetColor.setHex(grassLow);
-  }
-
-  return targetColor;
-}
-
-/* =========================================================
-   VEGETATION
-   ========================================================= */
-
-function createVegetation() {
-  const random = seededRandom(82471);
-
-  const trunkMaterial = new THREE.MeshStandardMaterial({
-    color: 0x59432e,
-    roughness: 1
-  });
-
-  const leafMaterials = [
-    new THREE.MeshStandardMaterial({
-      color: 0x294f36,
-      roughness: 1
-    }),
-
-    new THREE.MeshStandardMaterial({
-      color: 0x376443,
-      roughness: 1
-    }),
-
-    new THREE.MeshStandardMaterial({
-      color: 0x527449,
-      roughness: 1
-    }),
-
-    new THREE.MeshStandardMaterial({
-      color: 0x6c824b,
-      roughness: 1
-    })
-  ];
-
-  const trunkGeometry = new THREE.CylinderGeometry(
-    0.22,
-    0.38,
-    3.4,
-    6
-  );
-
-  const crownGeometry = new THREE.IcosahedronGeometry(
-    2.5,
-    1
-  );
-
- const treeGroup = new THREE.Group();
-
-  for (let i = 0; i < WORLD.treeCount; i++) {
-    const angle = random() * Math.PI * 2;
-
-    const radius =
-      Math.sqrt(random()) *
-      (WORLD.islandRadius - 9);
-
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-
-    if (
-      x > -17 &&
-      x < 18 &&
-      z > -15 &&
-      z < 17 &&
-      random() > 0.12
-    ) {
-      continue;
-    }
-
-    const groundY = getTerrainHeight(x, z);
-
-    const scale = 0.65 + random() * 0.85;
-
-    const tree = new THREE.Group();
-
-    const trunk = new THREE.Mesh(
-      trunkGeometry,
-      trunkMaterial
-    );
-
-    trunk.position.y = 1.55 * scale;
-    trunk.scale.setScalar(scale);
-    trunk.castShadow = true;
-
-    tree.add(trunk);
-
-    const crown = new THREE.Mesh(
-      crownGeometry,
-      leafMaterials[
-        Math.floor(random() * leafMaterials.length)
-      ]
-    );
-
-    crown.position.y = 4.0 * scale;
-
-    crown.scale.set(
-      0.85 + random() * 0.35,
-      0.9 + random() * 0.5,
-      0.85 + random() * 0.35
-    );
-
-    crown.castShadow = true;
-    crown.receiveShadow = true;
-
-    tree.add(crown);
-
-    tree.position.set(
-      x,
-      groundY,
-      z
-    );
-
-    tree.rotation.y =
-      random() * Math.PI * 2;
-
-   treeGroup.add(tree);
-
-terrainFollowingObjects.push({
-  object: tree,
-  x: x,
-  z: z,
-  offsetY: 0
-});
-  }
-
-  islandGroup.add(treeGroup);
-
-  createBushes(random);
-}
-
-/* =========================================================
-   BUSHES
-   ========================================================= */
-
-function createBushes(random) {
-  const bushGeometry = new THREE.IcosahedronGeometry(
-    1.1,
-    0
-  );
-
-  const bushMaterials = [
-    new THREE.MeshStandardMaterial({
-      color: 0x3d673e,
-      roughness: 1
-    }),
-
-    new THREE.MeshStandardMaterial({
-      color: 0x547b45,
-      roughness: 1
-    })
-  ];
-
-  const bushes = new THREE.Group();
-
-  for (let i = 0; i < 95; i++) {
-    const angle = random() * Math.PI * 2;
-
-    const radius =
-      13 + random() * (WORLD.islandRadius - 18);
-
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-
-    const bush = new THREE.Mesh(
-      bushGeometry,
-      bushMaterials[
-        Math.floor(random() * bushMaterials.length)
-      ]
-    );
-
-    const scale = 0.45 + random() * 0.8;
-
-    bush.scale.set(
-      scale * 1.3,
-      scale * 0.7,
-      scale
-    );
-
-    bush.position.set(
-      x,
-      getTerrainHeight(x, z) + 0.65 * scale,
-      z
-    );
-
-    bush.castShadow = true;
-
-   bushes.add(bush);
-
-terrainFollowingObjects.push({
-  object: bush,
-  x: x,
-  z: z,
-  offsetY: 0.65 * scale
-});
-  }
-
-  islandGroup.add(bushes);
-}
-
-/* =========================================================
-   ATMOSPHERE
-   ========================================================= */
-
-function createAtmosphere() {
-  const skyGeometry = new THREE.SphereGeometry(
-    700,
-    32,
-    20
-  );
-
-  const skyMaterial = new THREE.MeshBasicMaterial({
-    color: 0x9bb8b0,
-    side: THREE.BackSide
-  });
-
-  const sky = new THREE.Mesh(
-    skyGeometry,
-    skyMaterial
-  );
-
-  scene.add(sky);
-}
-
-/* =========================================================
-   TERRAIN BRUSH PREVIEW
-   ========================================================= */
-
-function createBrushPreview() {
-  const geometry = new THREE.RingGeometry(
-    brushRadius - 0.2,
-    brushRadius,
-    64
-  );
-
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xb7d69a,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: 0.85,
-    depthWrite: false
-  });
-
-  brushPreview = new THREE.Mesh(
-    geometry,
-    material
-  );
-
-  brushPreview.rotation.x = -Math.PI / 2;
-
-  brushPreview.position.y = 0.2;
-
-  brushPreview.visible = false;
-
-  brushPreview.renderOrder = 5;
-
-  scene.add(brushPreview);
-}
-
-function updateBrushPreviewSize() {
-  const geometry = new THREE.RingGeometry(
-    Math.max(0.1, brushRadius - 0.2),
-    brushRadius,
-    64
-  );
-
-  brushPreview.geometry.dispose();
-
-  brushPreview.geometry = geometry;
-}
-
-function updateBrushPreviewColor() {
-  const colors = {
-    raise: 0x9ee58d,
-    lower: 0xe9a17f,
-    flatten: 0x91c9ef
-  };
-
-  if (colors[activeTool]) {
-    brushPreview.material.color.setHex(
-      colors[activeTool]
-    );
-  }
-}
-
-/* =========================================================
-   CAMERA CONTROLS
-   ========================================================= */
-
-function createControls() {
-  controls = new OrbitControls(
-    camera,
-    renderer.domElement
-  );
-
-  controls.target.set(0, 4, 0);
-
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.055;
-
-  controls.minDistance = 35;
-  controls.maxDistance = 260;
-
-  controls.maxPolarAngle = Math.PI * 0.47;
-  controls.minPolarAngle = 0.18;
-
-  controls.enablePan = true;
-
-  controls.panSpeed = 0.8;
-  controls.rotateSpeed = 0.55;
-  controls.zoomSpeed = 0.8;
-
-  controls.update();
-
-  renderer.domElement.addEventListener(
-    "dblclick",
-    focusIsland
-  );
-}
-
-function focusIsland() {
-  if (activeTool !== "camera") return;
-
-  controls.target.set(0, 4, 0);
-
-  controls.update();
-
-  statusText.textContent =
-    "CAMERA FOCUSED ON ISLAND";
-}
-
-/* =========================================================
-   TERRAIN EDITOR SETUP
-   ========================================================= */
-
-function setupTerrainEditor() {
-  toolButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      selectTool(button.dataset.tool);
-    });
-  });
-
-  brushSizeInput.addEventListener("input", () => {
-    brushRadius = Number(brushSizeInput.value);
-
-    brushSizeValue.textContent =
-      String(brushRadius);
-
-    updateBrushPreviewSize();
-  });
-
-  brushStrengthInput.addEventListener("input", () => {
-    brushStrength = Number(
-      brushStrengthInput.value
-    );
-
-    brushStrengthValue.textContent =
-      brushStrength.toFixed(1);
-  });
-
-  resetTerrainButton.addEventListener(
-    "click",
-    resetTerrain
-  );
-
-  const canvas = renderer.domElement;
-
-  canvas.addEventListener(
-    "pointerdown",
-    onTerrainPointerDown
-  );
-
-  canvas.addEventListener(
-    "pointermove",
-    onTerrainPointerMove
-  );
-
-  canvas.addEventListener(
-    "pointerup",
-    onTerrainPointerUp
-  );
-
-  canvas.addEventListener(
-    "pointercancel",
-    onTerrainPointerUp
-  );
-
-  canvas.addEventListener(
-    "lostpointercapture",
-    onTerrainPointerUp
-  );
-}
-
-/* =========================================================
-   SELECT TERRAIN TOOL
-   ========================================================= */
-
-function selectTool(tool) {
-  activeTool = tool;
-
-  isEditing = false;
-  activePointerId = null;
-
-  controls.enabled = tool === "camera";
-
-  brushPreview.visible = false;
-
-  toolButtons.forEach((button) => {
-    button.classList.toggle(
-      "active",
-      button.dataset.tool === tool
-    );
-  });
-
-  const descriptions = {
-    camera: "Rotate, zoom and explore your island.",
-
-    raise: "Hold and drag to raise the terrain.",
-
-    lower: "Hold and drag to lower the terrain.",
-
-    flatten: "Hold and drag to flatten land to the starting height."
-  };
-
-  toolDescription.textContent =
-    descriptions[tool];
-
-  const statusNames = {
-    camera: "CAMERA MODE",
-    raise: "TERRAIN RAISE MODE",
-    lower: "TERRAIN LOWER MODE",
-    flatten: "TERRAIN FLATTEN MODE"
-  };
-
-  statusText.textContent =
-    statusNames[tool];
-
-  updateBrushPreviewColor();
-}
-
-/* =========================================================
-   MOUSE RAYCASTING
-   ========================================================= */
-
-function getTerrainIntersection(event) {
-  const rect = renderer.domElement.getBoundingClientRect();
-
-  pointer.x =
-    ((event.clientX - rect.left) / rect.width) * 2 - 1;
-
-  pointer.y =
-    -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-  raycaster.setFromCamera(pointer, camera);
-
-  const intersections = raycaster.intersectObject(
-    terrainMesh,
-    false
-  );
-
-  if (intersections.length === 0) {
-    return null;
-  }
-
-  return intersections[0];
-}
-
-/* =========================================================
-   POINTER DOWN
-   ========================================================= */
-
-function onTerrainPointerDown(event) {
-  if (activeTool === "camera") return;
-
-  if (event.button !== 0) return;
-
-  const hit = getTerrainIntersection(event);
-
-  if (!hit) return;
-
-  event.preventDefault();
-
-  activePointerId = event.pointerId;
-
-  renderer.domElement.setPointerCapture(
-    event.pointerId
-  );
-
-  isEditing = true;
-
-  lastBrushTime = performance.now();
-
-  // Flatten remembers the height where the player
-  // initially presses the mouse.
-
-  if (activeTool === "flatten") {
-    flattenTargetHeight = hit.point.y;
-  }
-
-  updateBrushPosition(hit.point);
-
-  applyTerrainBrush(hit.point, 0.016);
-}
-
-/* =========================================================
-   POINTER MOVE
-   ========================================================= */
-
-function onTerrainPointerMove(event) {
-  const hit = getTerrainIntersection(event);
-
-  if (hit && activeTool !== "camera") {
-    updateBrushPosition(hit.point);
-  } else {
-    brushPreview.visible = false;
-  }
-
-  if (
-    !isEditing ||
-    activePointerId !== event.pointerId
-  ) {
-    return;
-  }
-
-  if (!hit) return;
-
-  event.preventDefault();
-
-  const now = performance.now();
-
-  const deltaTime = THREE.MathUtils.clamp(
-    (now - lastBrushTime) / 1000,
-    0.005,
-    0.05
-  );
-
-  lastBrushTime = now;
-
-  applyTerrainBrush(
-    hit.point,
-    deltaTime
-  );
-}
-
-/* =========================================================
-   POINTER UP
-   ========================================================= */
-
-function onTerrainPointerUp(event) {
-  if (activePointerId !== event.pointerId) return;
-
-  isEditing = false;
-
-  activePointerId = null;
-}
-
-/* =========================================================
-   BRUSH POSITION
-   ========================================================= */
-
-function updateBrushPosition(point) {
-  if (activeTool === "camera") {
-    brushPreview.visible = false;
-    return;
-  }
-
-  brushPreview.visible = true;
-
-  brushPreview.position.set(
-    point.x,
-    point.y + 0.18,
-    point.z
-  );
-}
-
-/* =========================================================
-   APPLY TERRAIN BRUSH
-   ========================================================= */
-
-function applyTerrainBrush(worldPoint, deltaTime) {
-  if (!terrainGeometry) return;
+function getHeightAt(x, z) {
+  if (!terrainGeometry) return 0;
 
   const positions =
     terrainGeometry.attributes.position;
 
-  const center = islandGroup.worldToLocal(
-    worldPoint.clone()
+  const size = WORLD.islandRadius * 2.35;
+  const halfSize = size / 2;
+  const segments = WORLD.terrainSegments;
+
+  const gridX = THREE.MathUtils.clamp(
+    ((x + halfSize) / size) * segments,
+    0,
+    segments
   );
 
-  let changed = false;
+  const gridZ = THREE.MathUtils.clamp(
+    ((z + halfSize) / size) * segments,
+    0,
+    segments
+  );
 
-  const radius = brushRadius;
+  const x0 = Math.floor(gridX);
+  const z0 = Math.floor(gridZ);
 
-  const strength = brushStrength;
+  const x1 = Math.min(x0 + 1, segments);
+  const z1 = Math.min(z0 + 1, segments);
 
-  for (let i = 0; i < positions.count; i++) {
-    const x = positions.getX(i);
-    const z = positions.getZ(i);
+  const tx = gridX - x0;
+  const tz = gridZ - z0;
 
-    const dx = x - center.x;
-    const dz = z - center.z;
+  const rowSize = segments + 1;
 
-    const distance = Math.sqrt(
-      dx * dx + dz * dz
-    );
+  const a = positions.getY(
+    z0 * rowSize + x0
+  );
 
-    if (distance > radius) continue;
+  const b = positions.getY(
+    z0 * rowSize + x1
+  );
 
-    // Smooth falloff:
-    // Strongest in the center, weaker near the edge.
+  const c = positions.getY(
+    z1 * rowSize + x0
+  );
 
-    const falloff =
-      1 - smoothstep(0, radius, distance);
+  const d = positions.getY(
+    z1 * rowSize + x1
+  );
 
-    const weight = falloff * falloff;
+  const top = THREE.MathUtils.lerp(a, b, tx);
+  const bottom = THREE.MathUtils.lerp(c, d, tx);
 
-    let height = positions.getY(i);
-
-    if (activeTool === "raise") {
-      height +=
-        strength *
-        deltaTime *
-        3.0 *
-        weight;
-    }
-
-    else if (activeTool === "lower") {
-      height -=
-        strength *
-        deltaTime *
-        3.0 *
-        weight;
-    }
-
-    else if (activeTool === "flatten") {
-      const flattenAmount = THREE.MathUtils.clamp(
-        strength * deltaTime * 2.5 * weight,
-        0,
-        1
-      );
-
-      height = THREE.MathUtils.lerp(
-        height,
-        flattenTargetHeight,
-        flattenAmount
-      );
-    }
-
-    height = THREE.MathUtils.clamp(
-      height,
-      WORLD.minimumTerrainHeight,
-      WORLD.maximumTerrainHeight
-    );
-
-    if (Math.abs(height - positions.getY(i)) > 0.0001) {
-      positions.setY(i, height);
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    updateTerrainMesh();
-  }
+  return THREE.MathUtils.lerp(top, bottom, tz);
 }
 
 /* =========================================================
-   UPDATE TERRAIN MESH
+   RAPier TERRAIN COLLIDER
+   Static trimesh from actual terrain vertices.
+   ========================================================= */
+
+function rebuildTerrainCollider() {
+  if (!physicsWorld || !terrainGeometry) return;
+
+  if (terrainBody) {
+    physicsWorld.removeRigidBody(terrainBody);
+    terrainBody = null;
+    terrainCollider = null;
+  }
+
+  const vertices = new Float32Array(
+    terrainGeometry.attributes.position.array
+  );
+
+  const geometryIndex =
+    terrainGeometry.index.array;
+
+  const indices = new Uint32Array(geometryIndex);
+
+  terrainBody = physicsWorld.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed()
+  );
+
+  const colliderDescription =
+    RAPIER.ColliderDesc.trimesh(
+      vertices,
+      indices
+    );
+
+  colliderDescription.setFriction(0.9);
+  colliderDescription.setRestitution(0.05);
+
+  terrainCollider = physicsWorld.createCollider(
+    colliderDescription,
+    terrainBody
+  );
+
+  updatePhysicsStatus(true);
+}
+
+/* =========================================================
+   TERRAIN VISUAL UPDATE
    ========================================================= */
 
 function updateTerrainMesh() {
@@ -1134,15 +584,416 @@ function updateTerrainMesh() {
   colors.needsUpdate = true;
 
   terrainGeometry.computeVertexNormals();
-
   terrainGeometry.computeBoundingSphere();
-
   terrainGeometry.computeBoundingBox();
-   updateTerrainFollowingObjects();
 }
 
 /* =========================================================
-   RESET TERRAIN
+   VEGETATION
+   ========================================================= */
+
+function createVegetation() {
+  vegetationGroup = new THREE.Group();
+
+  terrainFollowingObjects = [];
+
+  const trunkGeometry =
+    new THREE.CylinderGeometry(
+      0.35,
+      0.55,
+      3.1,
+      7
+    );
+
+  const crownGeometry =
+    new THREE.ConeGeometry(
+      2.1,
+      4.8,
+      7
+    );
+
+  for (let i = 0; i < WORLD.treeCount; i++) {
+    const angle = Math.random() * Math.PI * 2;
+
+    const radius =
+      Math.sqrt(Math.random()) *
+      (WORLD.islandRadius - 10);
+
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+
+    if (
+      x > -35 &&
+      x < 35 &&
+      z > -30 &&
+      z < 35 &&
+      Math.random() > 0.12
+    ) {
+      continue;
+    }
+
+    const scale = 0.65 + Math.random() * 0.85;
+
+    const tree = new THREE.Group();
+
+    const trunk = new THREE.Mesh(
+      trunkGeometry,
+      trunkMaterial
+    );
+
+    trunk.position.y = 1.55 * scale;
+    trunk.scale.setScalar(scale);
+    trunk.castShadow = true;
+
+    tree.add(trunk);
+
+    const crown = new THREE.Mesh(
+      crownGeometry,
+      leafMaterials[
+        Math.floor(
+          Math.random() * leafMaterials.length
+        )
+      ]
+    );
+
+    crown.position.y = 4.0 * scale;
+
+    crown.scale.set(
+      0.85 + Math.random() * 0.35,
+      0.9 + Math.random() * 0.5,
+      0.85 + Math.random() * 0.35
+    );
+
+    crown.castShadow = true;
+
+    tree.add(crown);
+
+    tree.position.set(
+      x,
+      getHeightAt(x, z),
+      z
+    );
+
+    tree.rotation.y =
+      Math.random() * Math.PI * 2;
+
+    vegetationGroup.add(tree);
+
+    terrainFollowingObjects.push({
+      object: tree,
+      x,
+      z,
+      offsetY: 0
+    });
+  }
+
+  createBushes();
+
+  scene.add(vegetationGroup);
+}
+
+function createBushes() {
+  const bushGeometry =
+    new THREE.IcosahedronGeometry(1.1, 0);
+
+  for (let i = 0; i < WORLD.bushCount; i++) {
+    const angle = Math.random() * Math.PI * 2;
+
+    const radius =
+      13 +
+      Math.random() * (WORLD.islandRadius - 25);
+
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+
+    const bush = new THREE.Mesh(
+      bushGeometry,
+      bushMaterials[
+        Math.floor(
+          Math.random() * bushMaterials.length
+        )
+      ]
+    );
+
+    const scale = 0.45 + Math.random() * 0.8;
+
+    bush.scale.set(
+      scale * 1.3,
+      scale * 0.7,
+      scale
+    );
+
+    const offsetY = 0.65 * scale;
+
+    bush.position.set(
+      x,
+      getHeightAt(x, z) + offsetY,
+      z
+    );
+
+    vegetationGroup.add(bush);
+
+    terrainFollowingObjects.push({
+      object: bush,
+      x,
+      z,
+      offsetY
+    });
+  }
+}
+
+function updateVegetationHeights() {
+  for (const item of terrainFollowingObjects) {
+    item.object.position.y =
+      getHeightAt(item.x, item.z) +
+      item.offsetY;
+  }
+}
+
+/* =========================================================
+   TERRAIN BRUSH PREVIEW
+   ========================================================= */
+
+function createBrushPreview() {
+  const geometry = new THREE.RingGeometry(
+    0.94,
+    1,
+    64
+  );
+
+  const material =
+    new THREE.MeshBasicMaterial({
+      color: 0xe4efbb,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false
+    });
+
+  brushRing = new THREE.Mesh(
+    geometry,
+    material
+  );
+
+  brushRing.rotation.x = -Math.PI / 2;
+  brushRing.visible = false;
+
+  scene.add(brushRing);
+}
+
+function getTerrainIntersection(event) {
+  const rect =
+    renderer.domElement.getBoundingClientRect();
+
+  pointer.x =
+    ((event.clientX - rect.left) / rect.width) * 2 - 1;
+
+  pointer.y =
+    -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+
+  const hits = raycaster.intersectObject(
+    terrainMesh,
+    false
+  );
+
+  return hits.length > 0 ? hits[0] : null;
+}
+
+/* =========================================================
+   TERRAIN SCULPTING
+   ========================================================= */
+
+function applyBrush(hit, deltaTime) {
+  if (!hit || currentTool === "camera") return;
+
+  const positions =
+    terrainGeometry.attributes.position;
+
+  const centerX = hit.point.x;
+  const centerZ = hit.point.z;
+
+  const radius = brushSize;
+  const strength = brushStrength;
+
+  let changed = false;
+
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const z = positions.getZ(i);
+
+    const dx = x - centerX;
+    const dz = z - centerZ;
+
+    const distance = Math.sqrt(
+      dx * dx + dz * dz
+    );
+
+    if (distance >= radius) continue;
+
+    const normalized =
+      1 - distance / radius;
+
+    const falloff =
+      normalized * normalized *
+      (3 - 2 * normalized);
+
+    let height = positions.getY(i);
+
+    if (currentTool === "raise") {
+      height +=
+        strength * deltaTime * 3 * falloff;
+    }
+
+    if (currentTool === "lower") {
+      height -=
+        strength * deltaTime * 3 * falloff;
+    }
+
+    if (currentTool === "flatten") {
+      const blend = Math.min(
+        1,
+        strength * deltaTime * 2 * falloff
+      );
+
+      height = THREE.MathUtils.lerp(
+        height,
+        flattenTarget,
+        blend
+      );
+    }
+
+    height = THREE.MathUtils.clamp(
+      height,
+      WORLD.minimumTerrainHeight,
+      WORLD.maximumTerrainHeight
+    );
+
+    if (Math.abs(height - positions.getY(i)) > 0.0001) {
+      positions.setY(i, height);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    terrainChanged = true;
+    updateTerrainMesh();
+  }
+}
+
+function setupTerrainEditing() {
+  const canvas = renderer.domElement;
+
+  canvas.addEventListener(
+    "pointermove",
+    onTerrainPointerMove
+  );
+
+  canvas.addEventListener(
+    "pointerdown",
+    onTerrainPointerDown
+  );
+
+  canvas.addEventListener(
+    "pointerup",
+    onTerrainPointerUp
+  );
+
+  canvas.addEventListener(
+    "pointercancel",
+    onTerrainPointerUp
+  );
+
+  canvas.addEventListener(
+    "lostpointercapture",
+    onTerrainPointerUp
+  );
+}
+
+function onTerrainPointerDown(event) {
+  if (currentTool === "camera") return;
+  if (event.button !== 0) return;
+
+  const hit = getTerrainIntersection(event);
+
+  if (!hit) return;
+
+  event.preventDefault();
+
+  isSculpting = true;
+  terrainChanged = false;
+
+  controls.enabled = false;
+
+  try {
+    renderer.domElement.setPointerCapture(
+      event.pointerId
+    );
+  } catch (error) {
+    // Pointer capture may be unavailable on some devices.
+  }
+
+  if (currentTool === "flatten") {
+    flattenTarget = hit.point.y;
+  }
+
+  lastBrushTime = performance.now();
+
+  applyBrush(hit, 0.016);
+}
+
+function onTerrainPointerMove(event) {
+  const hit = getTerrainIntersection(event);
+
+  if (!hit) {
+    brushRing.visible = false;
+    return;
+  }
+
+  brushRing.visible = true;
+
+  brushRing.position.set(
+    hit.point.x,
+    hit.point.y + 0.18,
+    hit.point.z
+  );
+
+  brushRing.scale.setScalar(brushSize);
+
+  if (!isSculpting) return;
+
+  const now = performance.now();
+
+  const deltaTime = THREE.MathUtils.clamp(
+    (now - lastBrushTime) / 1000,
+    0.005,
+    0.05
+  );
+
+  lastBrushTime = now;
+
+  applyBrush(hit, deltaTime);
+}
+
+function onTerrainPointerUp(event) {
+  if (!isSculpting) return;
+
+  isSculpting = false;
+  controls.enabled = currentTool === "camera";
+
+  if (terrainChanged) {
+    rebuildTerrainCollider();
+    updateVegetationHeights();
+
+    terrainChanged = false;
+
+    showToast("Terrain collision updated");
+  }
+}
+
+/* =========================================================
+   TERRAIN RESET
    ========================================================= */
 
 function resetTerrain() {
@@ -1157,33 +1008,345 @@ function resetTerrain() {
   }
 
   updateTerrainMesh();
+  rebuildTerrainCollider();
+  updateVegetationHeights();
 
-  statusText.textContent =
-    "TERRAIN RESTORED TO ORIGINAL";
+  showToast("Terrain restored");
 }
 
 /* =========================================================
-   INTERFACE EVENTS
+   PHYSICAL TEST OBJECTS
    ========================================================= */
 
-function addEventListeners() {
-  window.addEventListener(
-    "resize",
-    onWindowResize
+function spawnPhysicsObject(type) {
+  const x = (Math.random() - 0.5) * 35;
+  const z = (Math.random() - 0.5) * 35;
+
+  const groundY = getHeightAt(x, z);
+
+  const startY = groundY + 35;
+
+  let mesh;
+  let bodyDescription;
+  let colliderDescription;
+
+  if (type === "box") {
+    const size = 2.5;
+
+    const geometry = new THREE.BoxGeometry(
+      size,
+      size,
+      size
+    );
+
+    const material =
+      new THREE.MeshStandardMaterial({
+        color: 0xb18b62,
+        roughness: 0.7
+      });
+
+    mesh = new THREE.Mesh(geometry, material);
+
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    bodyDescription =
+      RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(x, startY, z)
+        .setCanSleep(true);
+
+    colliderDescription =
+      RAPIER.ColliderDesc.cuboid(
+        size / 2,
+        size / 2,
+        size / 2
+      );
+
+  } else {
+    const radius = 1.5;
+
+    const geometry =
+      new THREE.SphereGeometry(radius, 20, 16);
+
+    const material =
+      new THREE.MeshStandardMaterial({
+        color: 0x8bacc0,
+        roughness: 0.45
+      });
+
+    mesh = new THREE.Mesh(geometry, material);
+
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    bodyDescription =
+      RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(x, startY, z)
+        .setCanSleep(true);
+
+    colliderDescription =
+      RAPIER.ColliderDesc.ball(radius);
+  }
+
+  colliderDescription.setFriction(0.8);
+  colliderDescription.setRestitution(0.15);
+
+  const body = physicsWorld.createRigidBody(
+    bodyDescription
   );
 
-  enterButton.addEventListener("click", () => {
-    introPanel.classList.add("hidden");
+  physicsWorld.createCollider(
+    colliderDescription,
+    body
+  );
 
-    controlsHint.classList.add("visible");
+  scene.add(mesh);
 
-    statusText.textContent =
-      "EXPLORATION MODE";
+  physicsObjects.push({
+    mesh,
+    body
   });
+
+  showToast(
+    type === "box"
+      ? "Physical box spawned"
+      : "Physical sphere spawned"
+  );
+}
+
+function clearPhysicsObjects() {
+  for (const item of physicsObjects) {
+    physicsWorld.removeRigidBody(item.body);
+
+    scene.remove(item.mesh);
+
+    item.mesh.geometry.dispose();
+    item.mesh.material.dispose();
+  }
+
+  physicsObjects = [];
+
+  showToast("Test objects cleared");
 }
 
 /* =========================================================
-   RESIZE
+   PHYSICS UPDATE
+   ========================================================= */
+
+function updatePhysics(deltaTime) {
+  accumulator += Math.min(deltaTime, 0.1);
+
+  while (accumulator >= FIXED_STEP) {
+    physicsWorld.step();
+    accumulator -= FIXED_STEP;
+  }
+
+  for (const item of physicsObjects) {
+    const position = item.body.translation();
+    const rotation = item.body.rotation();
+
+    item.mesh.position.set(
+      position.x,
+      position.y,
+      position.z
+    );
+
+    item.mesh.quaternion.set(
+      rotation.x,
+      rotation.y,
+      rotation.z,
+      rotation.w
+    );
+  }
+}
+
+/* =========================================================
+   USER INTERFACE
+   ========================================================= */
+
+function setupUI() {
+  const terrainPanel =
+    document.getElementById("terrain-panel");
+
+  const terrainToggle =
+    document.getElementById("terrain-toggle");
+
+  const closeTerrain =
+    document.getElementById("close-terrain");
+
+  function toggleTerrainPanel(open) {
+    terrainPanel.classList.toggle("open", open);
+
+    document.getElementById("toggle-arrow").textContent =
+      open ? "⌃" : "⌄";
+  }
+
+  terrainToggle.addEventListener("click", () => {
+    toggleTerrainPanel(
+      !terrainPanel.classList.contains("open")
+    );
+  });
+
+  closeTerrain.addEventListener("click", () => {
+    toggleTerrainPanel(false);
+  });
+
+  document
+    .getElementById("enter-button")
+    .addEventListener("click", () => {
+      document
+        .getElementById("intro-panel")
+        .style.display = "none";
+    });
+
+  document
+    .querySelectorAll(".tool-button")
+    .forEach(button => {
+      button.addEventListener("click", () => {
+        currentTool = button.dataset.tool;
+
+        document
+          .querySelectorAll(".tool-button")
+          .forEach(item => {
+            item.classList.toggle(
+              "active",
+              item === button
+            );
+          });
+
+        controls.enabled =
+          currentTool === "camera";
+
+        brushRing.visible = false;
+
+        const descriptions = {
+          camera:
+            "Camera mode: drag to rotate, scroll to zoom, right-drag to pan.",
+
+          raise:
+            "Raise: hold and drag over the terrain to create hills.",
+
+          lower:
+            "Lower: hold and drag over the terrain to create valleys.",
+
+          flatten:
+            "Flatten: hold and drag to level the ground to the starting brush height."
+        };
+
+        document.getElementById(
+          "tool-description"
+        ).textContent = descriptions[currentTool];
+      });
+    });
+
+  const sizeInput =
+    document.getElementById("brush-size");
+
+  sizeInput.addEventListener("input", () => {
+    brushSize = Number(sizeInput.value);
+
+    document.getElementById(
+      "brush-size-value"
+    ).textContent = brushSize;
+
+    brushRing.scale.setScalar(brushSize);
+  });
+
+  const strengthInput =
+    document.getElementById("brush-strength");
+
+  strengthInput.addEventListener("input", () => {
+    brushStrength = Number(strengthInput.value);
+
+    document.getElementById(
+      "brush-strength-value"
+    ).textContent = brushStrength.toFixed(1);
+  });
+
+  document
+    .getElementById("reset-terrain")
+    .addEventListener("click", resetTerrain);
+
+  document
+    .getElementById("drop-box")
+    .addEventListener("click", () => {
+      spawnPhysicsObject("box");
+    });
+
+  document
+    .getElementById("drop-sphere")
+    .addEventListener("click", () => {
+      spawnPhysicsObject("sphere");
+    });
+
+  document
+    .getElementById("clear-objects")
+    .addEventListener("click", clearPhysicsObjects);
+
+  // The editor starts closed.
+  toggleTerrainPanel(false);
+}
+
+function updatePhysicsStatus(ready) {
+  const dot =
+    document.querySelector(".status-dot");
+
+  dot.classList.toggle("ready", ready);
+
+  document.getElementById(
+    "physics-status-text"
+  ).textContent = ready
+    ? "Physics online"
+    : "Physics loading";
+}
+
+function showToast(message) {
+  const toast = document.getElementById("toast");
+
+  toast.textContent = message;
+  toast.classList.add("show");
+
+  window.clearTimeout(showToast.timeout);
+
+  showToast.timeout = window.setTimeout(() => {
+    toast.classList.remove("show");
+  }, 1800);
+}
+
+/* =========================================================
+   MATHEMATICAL HELPERS
+   ========================================================= */
+
+function gaussian(
+  x,
+  z,
+  centerX,
+  centerZ,
+  spreadX,
+  spreadZ,
+  height
+) {
+  const dx = (x - centerX) / spreadX;
+  const dz = (z - centerZ) / spreadZ;
+
+  return (
+    height *
+    Math.exp(-0.5 * (dx * dx + dz * dz))
+  );
+}
+
+function smoothstep(edge0, edge1, value) {
+  const t = THREE.MathUtils.clamp(
+    (value - edge0) / (edge1 - edge0),
+    0,
+    1
+  );
+
+  return t * t * (3 - 2 * t);
+}
+
+/* =========================================================
+   WINDOW RESIZE
    ========================================================= */
 
 function onWindowResize() {
@@ -1196,145 +1359,29 @@ function onWindowResize() {
     window.innerWidth,
     window.innerHeight
   );
-
-  renderer.setPixelRatio(
-    Math.min(window.devicePixelRatio, 1.75)
-  );
 }
 
 /* =========================================================
-   ANIMATION LOOP
+   MAIN ANIMATION LOOP
    ========================================================= */
 
 function animate() {
-  animationFrameId =
-    requestAnimationFrame(animate);
+  requestAnimationFrame(animate);
 
-  const delta = Math.min(
+  const deltaTime = Math.min(
     clock.getDelta(),
-    0.05
+    0.1
   );
 
   controls.update();
 
-  if (water) {
-    water.material.opacity =
-      0.945 +
-      Math.sin(clock.elapsedTime * 0.35) * 0.012;
-  }
+  updatePhysics(deltaTime);
 
   renderer.render(scene, camera);
 }
 
 /* =========================================================
-   LOADING SCREEN
+   START
    ========================================================= */
 
-function setLoading(progress, message) {
-  loadingProgress.style.width =
-    `${progress}%`;
-
-  loadingMessage.textContent = message;
-}
-
-/* =========================================================
-   TERRAIN HEIGHT HELPERS
-   ========================================================= */
-
-
-function getTerrainHeight(x, z) {
-  if (!terrainGeometry) return 0;
-
-  const positions =
-    terrainGeometry.attributes.position;
-
-  const size = WORLD.islandRadius * 2.35;
-  const halfSize = size / 2;
-
-  const gridX = THREE.MathUtils.clamp(
-    ((x + halfSize) / size) * WORLD.terrainSegments,
-    0,
-    WORLD.terrainSegments
-  );
-
-  const gridZ = THREE.MathUtils.clamp(
-    ((z + halfSize) / size) * WORLD.terrainSegments,
-    0,
-    WORLD.terrainSegments
-  );
-
-  const x0 = Math.floor(gridX);
-  const z0 = Math.floor(gridZ);
-
-  const x1 = Math.min(
-    x0 + 1,
-    WORLD.terrainSegments
-  );
-
-  const z1 = Math.min(
-    z0 + 1,
-    WORLD.terrainSegments
-  );
-
-  const tx = gridX - x0;
-  const tz = gridZ - z0;
-
-  const a = positions.getY(
-    z0 * (WORLD.terrainSegments + 1) + x0
-  );
-
-  const b = positions.getY(
-    z0 * (WORLD.terrainSegments + 1) + x1
-  );
-
-  const c = positions.getY(
-    z1 * (WORLD.terrainSegments + 1) + x0
-  );
-
-  const d = positions.getY(
-    z1 * (WORLD.terrainSegments + 1) + x1
-  );
-
-  const top = THREE.MathUtils.lerp(a, b, tx);
-  const bottom = THREE.MathUtils.lerp(c, d, tx);
-
-  return THREE.MathUtils.lerp(top, bottom, tz);
-}
-
-function updateTerrainFollowingObjects() {
-  for (const item of terrainFollowingObjects) {
-    const groundY = getTerrainHeight(
-      item.x,
-      item.z
-    );
-
-    item.object.position.y =
-      groundY + item.offsetY;
-  }
-}
-
-/* =========================================================
-   SEEDED RANDOM GENERATOR
-   ========================================================= */
-
-function seededRandom(seed) {
-  let value = seed;
-
-  return function () {
-    value =
-      (value * 1664525 + 1013904223) %
-      4294967296;
-
-    return value / 4294967296;
-  };
-}
-
-/* =========================================================
-   CLEANUP
-   ========================================================= */
-
-window.addEventListener("beforeunload", () => {
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-  }
-});
+startApplication();
