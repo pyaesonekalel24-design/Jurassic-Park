@@ -5,7 +5,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#101914" />
+
   <title>Dinosaur Park — Prototype 01</title>
+
   <link rel="stylesheet" href="style.css" />
 
   <script type="importmap">
@@ -22,30 +24,36 @@
 
 <body>
   <div id="game">
+
     <div id="top-bar">
       <div class="brand">
-        <div class="brand-mark">JP</div>
+        <div class="brand-mark">DP</div>
+
         <div>
           <div class="brand-title">DINOSAUR PARK</div>
-          <div class="brand-subtitle">ISLAND DEVELOPMENT PROGRAM</div>
+          <div class="brand-subtitle">
+            ISLAND DEVELOPMENT PROGRAM
+          </div>
         </div>
       </div>
 
       <div class="prototype-label">
-        PROTOTYPE 01 <span>•</span> WORLD FOUNDATION
+        PROTOTYPE 01 <span>•</span> TERRAIN EDITOR
       </div>
     </div>
 
     <div id="scene-container"></div>
 
+    <!-- INTRO -->
     <div id="intro-panel" class="glass-panel">
       <div class="eyebrow">WELCOME TO YOUR ISLAND</div>
 
       <h1>A world waiting<br />to come alive.</h1>
 
       <p>
-        This is the first foundation of your park.
-        Explore the island, inspect the terrain, and get a feel for the camera.
+        Your island is ready for development.
+        Shape the landscape and prepare the land
+        for your future dinosaur park.
       </p>
 
       <button id="enter-button" class="primary-button">
@@ -53,6 +61,85 @@
       </button>
     </div>
 
+    <!-- TERRAIN EDITOR -->
+    <div id="terrain-panel" class="glass-panel">
+
+      <div class="panel-heading">
+        <div>
+          <div class="eyebrow">LANDSCAPE TOOLS</div>
+          <div class="panel-title">Terrain Editor</div>
+        </div>
+
+        <div class="editor-indicator"></div>
+      </div>
+
+      <div class="tool-grid">
+
+        <button class="tool-button active" data-tool="camera">
+          <span class="tool-icon">◉</span>
+          <span>Camera</span>
+        </button>
+
+        <button class="tool-button" data-tool="raise">
+          <span class="tool-icon">↗</span>
+          <span>Raise</span>
+        </button>
+
+        <button class="tool-button" data-tool="lower">
+          <span class="tool-icon">↘</span>
+          <span>Lower</span>
+        </button>
+
+        <button class="tool-button" data-tool="flatten">
+          <span class="tool-icon">▰</span>
+          <span>Flatten</span>
+        </button>
+
+      </div>
+
+      <div class="editor-divider"></div>
+
+      <div class="setting-heading">
+        <label for="brush-size">Brush size</label>
+        <span id="brush-size-value">10</span>
+      </div>
+
+      <input
+        id="brush-size"
+        type="range"
+        min="3"
+        max="20"
+        step="1"
+        value="10"
+      />
+
+      <div class="setting-heading">
+        <label for="brush-strength">Brush strength</label>
+        <span id="brush-strength-value">1.5</span>
+      </div>
+
+      <input
+        id="brush-strength"
+        type="range"
+        min="0.2"
+        max="3"
+        step="0.1"
+        value="1.5"
+      />
+
+      <div class="editor-divider"></div>
+
+      <button id="reset-terrain" class="reset-button">
+        <span>↺</span> RESET TERRAIN
+      </button>
+
+      <div id="tool-description">
+        Select a tool to start editing.
+      </div>
+
+    </div>
+
+    <!-- CAMERA HINT -->
     <div id="controls-hint" class="glass-panel">
       <div class="hint-title">CAMERA CONTROLS</div>
 
@@ -77,29 +164,45 @@
       </div>
     </div>
 
+    <!-- STATUS BAR -->
     <div id="bottom-bar">
+
       <div class="status-group">
         <span class="status-dot"></span>
         <span id="status-text">ISLAND INITIALIZED</span>
       </div>
 
       <div class="bottom-right">
-        TROPICAL ISLAND <span class="separator">/</span> DEVELOPMENT MODE
+        TROPICAL ISLAND
+        <span class="separator">/</span>
+        DEVELOPMENT MODE
       </div>
+
     </div>
 
+    <!-- LOADING -->
     <div id="loading-screen">
+
       <div class="loading-content">
-        <div class="loading-symbol">JP</div>
-        <div class="loading-title">PREPARING YOUR ISLAND</div>
+
+        <div class="loading-symbol">DP</div>
+
+        <div class="loading-title">
+          PREPARING YOUR ISLAND
+        </div>
 
         <div class="loading-track">
           <div id="loading-progress"></div>
         </div>
 
-        <div id="loading-message">Building the world...</div>
+        <div id="loading-message">
+          Building the world...
+        </div>
+
       </div>
+
     </div>
+
   </div>
 </body>
 </html>
