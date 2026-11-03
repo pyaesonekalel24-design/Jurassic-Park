@@ -78,8 +78,8 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
 const WORLD = {
-  islandRadius: 72,
-  terrainSegments: 180,
+  islandRadius: 216,
+  terrainSegments: 270,
   waterLevel: 0,
   treeCount: 210,
 
@@ -304,29 +304,36 @@ function createIsland() {
       7,
       edgeDistance
     );
+  
+    // Scale landscape features with island size
+    const islandScale = WORLD.islandRadius / 72;
+
+    const terrainX = x / islandScale;
+    const terrainZ = z / islandScale;
 
     const hillA = gaussian(
-      x, z, -22, -14, 25, 31, 14
+      terrainX, terrainZ, -22, -14, 25, 31, 14
     );
 
     const hillB = gaussian(
-      x, z, 20, 7, 22, 25, 10
+      terrainX, terrainZ, 20, 7, 22, 25, 10
     );
 
     const hillC = gaussian(
-      x, z, -2, 32, 18, 19, 6
+      terrainX, terrainZ, -2, 32, 18, 19, 6
     );
 
     const ridge =
       Math.max(
         0,
-        Math.sin((x + z * 0.55) * 0.055)
+        Math.sin((terrainX + terrainZ * 0.55) * 0.055)
       ) * 2.0;
 
     const smallNoise =
-      Math.sin(x * 0.19) *
-      Math.cos(z * 0.17) * 0.65 +
-      Math.sin((x + z) * 0.31) * 0.28;
+      Math.sin(terrainX * 0.19) *
+      Math.cos(terrainZ * 0.17) * 0.65 +
+      Math.sin((terrainX + terrainZ) * 0.31) * 0.28;
+
 
     const landHeight =
       1.4 +
