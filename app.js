@@ -5,13 +5,16 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 /* =========================================================
    DINOSAUR PARK — PROTOTYPE 01
 
-   World foundation:
-   - 3D island
-   - Terrain
-   - Water
-   - Vegetation
-   - Camera controls
+   SYSTEMS:
+   1. Island terrain
+   2. Vegetation
+   3. Camera
+   4. Terrain editing
 
+   ========================================================= */
+
+/* =========================================================
+   DOM ELEMENTS
    ========================================================= */
 
 const container = document.getElementById("scene-container");
@@ -23,7 +26,23 @@ const loadingMessage = document.getElementById("loading-message");
 const enterButton = document.getElementById("enter-button");
 const introPanel = document.getElementById("intro-panel");
 const controlsHint = document.getElementById("controls-hint");
+
 const statusText = document.getElementById("status-text");
+
+const brushSizeInput = document.getElementById("brush-size");
+const brushStrengthInput = document.getElementById("brush-strength");
+
+const brushSizeValue = document.getElementById("brush-size-value");
+const brushStrengthValue = document.getElementById("brush-strength-value");
+
+const resetTerrainButton = document.getElementById("reset-terrain");
+const toolDescription = document.getElementById("tool-description");
+
+const toolButtons = document.querySelectorAll(".tool-button");
+
+/* =========================================================
+   GLOBAL VARIABLES
+   ========================================================= */
 
 let scene;
 let camera;
@@ -34,13 +53,38 @@ let clock;
 let islandGroup;
 let water;
 
+let terrainMesh;
+let terrainGeometry;
+
+let originalTerrainHeights;
+
+let brushPreview;
+
 let animationFrameId;
+
+let activeTool = "camera";
+
+let brushRadius = 10;
+let brushStrength = 1.5;
+
+let isEditing = false;
+let activePointerId = null;
+
+let flattenTargetHeight = 0;
+
+let lastBrushTime = 0;
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
 
 const WORLD = {
   islandRadius: 72,
   terrainSegments: 180,
   waterLevel: 0,
-  treeCount: 210
+  treeCount: 210,
+
+  maximumTerrainHeight: 40,
+  minimumTerrainHeight: -3
 };
 
 /* =========================================================
@@ -54,17 +98,21 @@ function init() {
 
   createScene();
 
-  setLoading(32, "Creating the island...");
+  setLoading(30, "Creating the island...");
 
   createLighting();
   createWater();
   createIsland();
 
-  setLoading(70, "Growing the forest...");
+  setLoading(65, "Growing the forest...");
 
   createVegetation();
   createAtmosphere();
+
+  createBrushPreview();
   createControls();
+
+  setupTerrainEditor();
 
   setLoading(100, "Island ready.");
 
@@ -87,7 +135,11 @@ function createScene() {
   scene = new THREE.Scene();
 
   scene.background = new THREE.Color(0x9bb8b0);
-  scene.fog = new THREE.FogExp2(0x9bb8b0, 0.0028);
+
+  scene.fog = new THREE.FogExp2(
+    0x9bb8b0,
+    0.0028
+  );
 
   camera = new THREE.PerspectiveCamera(
     48,
@@ -113,14 +165,21 @@ function createScene() {
   );
 
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.type =
+    THREE.PCFSoftShadowMap;
 
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.outputColorSpace =
+    THREE.SRGBColorSpace;
+
+  renderer.toneMapping =
+    THREE.ACESFilmicToneMapping;
+
   renderer.toneMappingExposure = 1.12;
 
   container.appendChild(renderer.domElement);
+
+  renderer.domElement.style.touchAction = "none";
 
   islandGroup = new THREE.Group();
 
@@ -168,9 +227,7 @@ function createLighting() {
 function createWater() {
   const geometry = new THREE.PlaneGeometry(
     1200,
-    1200,
-    1,
-    1
+    1200
   );
 
   const material = new THREE.MeshStandardMaterial({
@@ -204,27 +261,24 @@ function createIsland() {
 
   const size = WORLD.islandRadius * 2.35;
 
-  const geometry = new THREE.PlaneGeometry(
+  terrainGeometry = new THREE.PlaneGeometry(
     size,
     size,
     segments,
     segments
   );
 
-  geometry.rotateX(-Math.PI / 2);
+  terrainGeometry.rotateX(-Math.PI / 2);
 
-  const positions = geometry.attributes.position;
+  const positions =
+    terrainGeometry.attributes.position;
 
   const colors = [];
 
+  originalTerrainHeights =
+    new Float32Array(positions.count);
+
   const color = new THREE.Color();
-
-  const grassLow = new THREE.Color(0x536f43);
-  const grassMid = new THREE.Color(0x66864b);
-  const grassHigh = new THREE.Color(0x82945a);
-
-  const sandColor = new THREE.Color(0xb6a477);
-  const rockColor = new THREE.Color(0x77796a);
 
   for (let i = 0; i < positions.count; i++) {
     const x = positions.getX(i);
@@ -290,19 +344,9 @@ function createIsland() {
 
     positions.setY(i, height);
 
-    const nearShore = edgeDistance < 5.5;
+    originalTerrainHeights[i] = height;
 
-    if (height < 0.2 || nearShore) {
-      color.copy(sandColor);
-    } else if (height > 17) {
-      color.copy(rockColor);
-    } else if (height > 9) {
-      color.copy(grassHigh);
-    } else if (height > 3.5) {
-      color.copy(grassMid);
-    } else {
-      color.copy(grassLow);
-    }
+    getTerrainColor(height, color);
 
     const variation =
       0.94 +
@@ -317,12 +361,12 @@ function createIsland() {
     );
   }
 
-  geometry.setAttribute(
+  terrainGeometry.setAttribute(
     "color",
     new THREE.Float32BufferAttribute(colors, 3)
   );
 
-  geometry.computeVertexNormals();
+  terrainGeometry.computeVertexNormals();
 
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
@@ -330,17 +374,17 @@ function createIsland() {
     metalness: 0
   });
 
-  const terrain = new THREE.Mesh(
-    geometry,
+  terrainMesh = new THREE.Mesh(
+    terrainGeometry,
     material
   );
 
-  terrain.receiveShadow = true;
-  terrain.castShadow = true;
+  terrainMesh.receiveShadow = true;
+  terrainMesh.castShadow = true;
 
-  islandGroup.add(terrain);
+  islandGroup.add(terrainMesh);
 
-  // Shallow shoreline ring
+  // Shoreline
 
   const shoreGeometry = new THREE.RingGeometry(
     WORLD.islandRadius - 1.5,
@@ -363,6 +407,32 @@ function createIsland() {
   shore.position.y = 0.06;
 
   islandGroup.add(shore);
+}
+
+/* =========================================================
+   TERRAIN COLORS
+   ========================================================= */
+
+function getTerrainColor(height, targetColor) {
+  const sandColor = 0xb6a477;
+  const grassLow = 0x536f43;
+  const grassMid = 0x66864b;
+  const grassHigh = 0x82945a;
+  const rockColor = 0x77796a;
+
+  if (height < 0.2) {
+    targetColor.setHex(sandColor);
+  } else if (height > 17) {
+    targetColor.setHex(rockColor);
+  } else if (height > 9) {
+    targetColor.setHex(grassHigh);
+  } else if (height > 3.5) {
+    targetColor.setHex(grassMid);
+  } else {
+    targetColor.setHex(grassLow);
+  }
+
+  return targetColor;
 }
 
 /* =========================================================
@@ -423,8 +493,6 @@ function createVegetation() {
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
 
-    // Keep a central clearing for future construction.
-
     if (
       x > -17 &&
       x < 18 &&
@@ -478,7 +546,8 @@ function createVegetation() {
       z
     );
 
-    tree.rotation.y = random() * Math.PI * 2;
+    tree.rotation.y =
+      random() * Math.PI * 2;
 
     treeGroup.add(tree);
   }
@@ -575,7 +644,68 @@ function createAtmosphere() {
 }
 
 /* =========================================================
-   CAMERA
+   TERRAIN BRUSH PREVIEW
+   ========================================================= */
+
+function createBrushPreview() {
+  const geometry = new THREE.RingGeometry(
+    brushRadius - 0.2,
+    brushRadius,
+    64
+  );
+
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xb7d69a,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false
+  });
+
+  brushPreview = new THREE.Mesh(
+    geometry,
+    material
+  );
+
+  brushPreview.rotation.x = -Math.PI / 2;
+
+  brushPreview.position.y = 0.2;
+
+  brushPreview.visible = false;
+
+  brushPreview.renderOrder = 5;
+
+  scene.add(brushPreview);
+}
+
+function updateBrushPreviewSize() {
+  const geometry = new THREE.RingGeometry(
+    Math.max(0.1, brushRadius - 0.2),
+    brushRadius,
+    64
+  );
+
+  brushPreview.geometry.dispose();
+
+  brushPreview.geometry = geometry;
+}
+
+function updateBrushPreviewColor() {
+  const colors = {
+    raise: 0x9ee58d,
+    lower: 0xe9a17f,
+    flatten: 0x91c9ef
+  };
+
+  if (colors[activeTool]) {
+    brushPreview.material.color.setHex(
+      colors[activeTool]
+    );
+  }
+}
+
+/* =========================================================
+   CAMERA CONTROLS
    ========================================================= */
 
 function createControls() {
@@ -596,8 +726,8 @@ function createControls() {
   controls.minPolarAngle = 0.18;
 
   controls.enablePan = true;
-  controls.panSpeed = 0.8;
 
+  controls.panSpeed = 0.8;
   controls.rotateSpeed = 0.55;
   controls.zoomSpeed = 0.8;
 
@@ -609,8 +739,410 @@ function createControls() {
   );
 }
 
+function focusIsland() {
+  if (activeTool !== "camera") return;
+
+  controls.target.set(0, 4, 0);
+
+  controls.update();
+
+  statusText.textContent =
+    "CAMERA FOCUSED ON ISLAND";
+}
+
 /* =========================================================
-   INTERFACE AND EVENTS
+   TERRAIN EDITOR SETUP
+   ========================================================= */
+
+function setupTerrainEditor() {
+  toolButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      selectTool(button.dataset.tool);
+    });
+  });
+
+  brushSizeInput.addEventListener("input", () => {
+    brushRadius = Number(brushSizeInput.value);
+
+    brushSizeValue.textContent =
+      String(brushRadius);
+
+    updateBrushPreviewSize();
+  });
+
+  brushStrengthInput.addEventListener("input", () => {
+    brushStrength = Number(
+      brushStrengthInput.value
+    );
+
+    brushStrengthValue.textContent =
+      brushStrength.toFixed(1);
+  });
+
+  resetTerrainButton.addEventListener(
+    "click",
+    resetTerrain
+  );
+
+  const canvas = renderer.domElement;
+
+  canvas.addEventListener(
+    "pointerdown",
+    onTerrainPointerDown
+  );
+
+  canvas.addEventListener(
+    "pointermove",
+    onTerrainPointerMove
+  );
+
+  canvas.addEventListener(
+    "pointerup",
+    onTerrainPointerUp
+  );
+
+  canvas.addEventListener(
+    "pointercancel",
+    onTerrainPointerUp
+  );
+
+  canvas.addEventListener(
+    "lostpointercapture",
+    onTerrainPointerUp
+  );
+}
+
+/* =========================================================
+   SELECT TERRAIN TOOL
+   ========================================================= */
+
+function selectTool(tool) {
+  activeTool = tool;
+
+  isEditing = false;
+  activePointerId = null;
+
+  controls.enabled = tool === "camera";
+
+  brushPreview.visible = false;
+
+  toolButtons.forEach((button) => {
+    button.classList.toggle(
+      "active",
+      button.dataset.tool === tool
+    );
+  });
+
+  const descriptions = {
+    camera: "Rotate, zoom and explore your island.",
+
+    raise: "Hold and drag to raise the terrain.",
+
+    lower: "Hold and drag to lower the terrain.",
+
+    flatten: "Hold and drag to flatten land to the starting height."
+  };
+
+  toolDescription.textContent =
+    descriptions[tool];
+
+  const statusNames = {
+    camera: "CAMERA MODE",
+    raise: "TERRAIN RAISE MODE",
+    lower: "TERRAIN LOWER MODE",
+    flatten: "TERRAIN FLATTEN MODE"
+  };
+
+  statusText.textContent =
+    statusNames[tool];
+
+  updateBrushPreviewColor();
+}
+
+/* =========================================================
+   MOUSE RAYCASTING
+   ========================================================= */
+
+function getTerrainIntersection(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  pointer.x =
+    ((event.clientX - rect.left) / rect.width) * 2 - 1;
+
+  pointer.y =
+    -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+
+  const intersections = raycaster.intersectObject(
+    terrainMesh,
+    false
+  );
+
+  if (intersections.length === 0) {
+    return null;
+  }
+
+  return intersections[0];
+}
+
+/* =========================================================
+   POINTER DOWN
+   ========================================================= */
+
+function onTerrainPointerDown(event) {
+  if (activeTool === "camera") return;
+
+  if (event.button !== 0) return;
+
+  const hit = getTerrainIntersection(event);
+
+  if (!hit) return;
+
+  event.preventDefault();
+
+  activePointerId = event.pointerId;
+
+  renderer.domElement.setPointerCapture(
+    event.pointerId
+  );
+
+  isEditing = true;
+
+  lastBrushTime = performance.now();
+
+  // Flatten remembers the height where the player
+  // initially presses the mouse.
+
+  if (activeTool === "flatten") {
+    flattenTargetHeight = hit.point.y;
+  }
+
+  updateBrushPosition(hit.point);
+
+  applyTerrainBrush(hit.point, 0.016);
+}
+
+/* =========================================================
+   POINTER MOVE
+   ========================================================= */
+
+function onTerrainPointerMove(event) {
+  const hit = getTerrainIntersection(event);
+
+  if (hit && activeTool !== "camera") {
+    updateBrushPosition(hit.point);
+  } else {
+    brushPreview.visible = false;
+  }
+
+  if (
+    !isEditing ||
+    activePointerId !== event.pointerId
+  ) {
+    return;
+  }
+
+  if (!hit) return;
+
+  event.preventDefault();
+
+  const now = performance.now();
+
+  const deltaTime = THREE.MathUtils.clamp(
+    (now - lastBrushTime) / 1000,
+    0.005,
+    0.05
+  );
+
+  lastBrushTime = now;
+
+  applyTerrainBrush(
+    hit.point,
+    deltaTime
+  );
+}
+
+/* =========================================================
+   POINTER UP
+   ========================================================= */
+
+function onTerrainPointerUp(event) {
+  if (activePointerId !== event.pointerId) return;
+
+  isEditing = false;
+
+  activePointerId = null;
+}
+
+/* =========================================================
+   BRUSH POSITION
+   ========================================================= */
+
+function updateBrushPosition(point) {
+  if (activeTool === "camera") {
+    brushPreview.visible = false;
+    return;
+  }
+
+  brushPreview.visible = true;
+
+  brushPreview.position.set(
+    point.x,
+    point.y + 0.18,
+    point.z
+  );
+}
+
+/* =========================================================
+   APPLY TERRAIN BRUSH
+   ========================================================= */
+
+function applyTerrainBrush(worldPoint, deltaTime) {
+  if (!terrainGeometry) return;
+
+  const positions =
+    terrainGeometry.attributes.position;
+
+  const center = islandGroup.worldToLocal(
+    worldPoint.clone()
+  );
+
+  let changed = false;
+
+  const radius = brushRadius;
+
+  const strength = brushStrength;
+
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const z = positions.getZ(i);
+
+    const dx = x - center.x;
+    const dz = z - center.z;
+
+    const distance = Math.sqrt(
+      dx * dx + dz * dz
+    );
+
+    if (distance > radius) continue;
+
+    // Smooth falloff:
+    // Strongest in the center, weaker near the edge.
+
+    const falloff =
+      1 - smoothstep(0, radius, distance);
+
+    const weight = falloff * falloff;
+
+    let height = positions.getY(i);
+
+    if (activeTool === "raise") {
+      height +=
+        strength *
+        deltaTime *
+        3.0 *
+        weight;
+    }
+
+    else if (activeTool === "lower") {
+      height -=
+        strength *
+        deltaTime *
+        3.0 *
+        weight;
+    }
+
+    else if (activeTool === "flatten") {
+      const flattenAmount = THREE.MathUtils.clamp(
+        strength * deltaTime * 2.5 * weight,
+        0,
+        1
+      );
+
+      height = THREE.MathUtils.lerp(
+        height,
+        flattenTargetHeight,
+        flattenAmount
+      );
+    }
+
+    height = THREE.MathUtils.clamp(
+      height,
+      WORLD.minimumTerrainHeight,
+      WORLD.maximumTerrainHeight
+    );
+
+    if (Math.abs(height - positions.getY(i)) > 0.0001) {
+      positions.setY(i, height);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    updateTerrainMesh();
+  }
+}
+
+/* =========================================================
+   UPDATE TERRAIN MESH
+   ========================================================= */
+
+function updateTerrainMesh() {
+  const positions =
+    terrainGeometry.attributes.position;
+
+  const colors =
+    terrainGeometry.attributes.color;
+
+  const color = new THREE.Color();
+
+  for (let i = 0; i < positions.count; i++) {
+    const height = positions.getY(i);
+
+    getTerrainColor(height, color);
+
+    colors.setXYZ(
+      i,
+      color.r,
+      color.g,
+      color.b
+    );
+  }
+
+  positions.needsUpdate = true;
+  colors.needsUpdate = true;
+
+  terrainGeometry.computeVertexNormals();
+
+  terrainGeometry.computeBoundingSphere();
+
+  terrainGeometry.computeBoundingBox();
+}
+
+/* =========================================================
+   RESET TERRAIN
+   ========================================================= */
+
+function resetTerrain() {
+  const positions =
+    terrainGeometry.attributes.position;
+
+  for (let i = 0; i < positions.count; i++) {
+    positions.setY(
+      i,
+      originalTerrainHeights[i]
+    );
+  }
+
+  updateTerrainMesh();
+
+  statusText.textContent =
+    "TERRAIN RESTORED TO ORIGINAL";
+}
+
+/* =========================================================
+   INTERFACE EVENTS
    ========================================================= */
 
 function addEventListeners() {
@@ -624,18 +1156,14 @@ function addEventListeners() {
 
     controlsHint.classList.add("visible");
 
-    statusText.textContent = "EXPLORATION MODE";
+    statusText.textContent =
+      "EXPLORATION MODE";
   });
 }
 
-function focusIsland() {
-  controls.target.set(0, 4, 0);
-
-  controls.update();
-
-  statusText.textContent =
-    "CAMERA FOCUSED ON ISLAND";
-}
+/* =========================================================
+   RESIZE
+   ========================================================= */
 
 function onWindowResize() {
   camera.aspect =
@@ -658,7 +1186,8 @@ function onWindowResize() {
    ========================================================= */
 
 function animate() {
-  animationFrameId = requestAnimationFrame(animate);
+  animationFrameId =
+    requestAnimationFrame(animate);
 
   const delta = Math.min(
     clock.getDelta(),
@@ -666,9 +1195,6 @@ function animate() {
   );
 
   controls.update();
-
-  // Subtle water opacity variation.
-  // Visual only; no gameplay effect yet.
 
   if (water) {
     water.material.opacity =
@@ -684,7 +1210,8 @@ function animate() {
    ========================================================= */
 
 function setLoading(progress, message) {
-  loadingProgress.style.width = `${progress}%`;
+  loadingProgress.style.width =
+    `${progress}%`;
 
   loadingMessage.textContent = message;
 }
