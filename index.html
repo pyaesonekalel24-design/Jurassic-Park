@@ -2,207 +2,140 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#101914" />
-
-  <title>Dinosaur Park — Prototype 01</title>
-
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dinosaur Park - Island Builder</title>
+  <link rel="stylesheet" href="style.css">
 
   <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
-      }
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+      "@dimforge/rapier3d-compat": "https://esm.sh/@dimforge/rapier3d-compat@0.17.3"
     }
+  }
   </script>
-
-  <script type="module" src="app.js"></script>
 </head>
 
 <body>
-  <div id="game">
+  <div id="scene-container"></div>
 
-    <div id="top-bar">
-      <div class="brand">
-        <div class="brand-mark">DP</div>
+  <div id="loading-screen">
+    <div class="loading-title">ISLAND BUILDER</div>
+    <div class="loading-subtitle">Preparing your world...</div>
+  </div>
 
-        <div>
-          <div class="brand-title">DINOSAUR PARK</div>
-          <div class="brand-subtitle">
-            ISLAND DEVELOPMENT PROGRAM
-          </div>
-        </div>
-      </div>
-
-      <div class="prototype-label">
-        PROTOTYPE 01 <span>•</span> TERRAIN EDITOR
+  <header id="top-bar">
+    <div class="brand">
+      <div class="brand-mark">J</div>
+      <div>
+        <div class="brand-title">DINOSAUR PARK</div>
+        <div class="brand-subtitle">ISLAND BUILDER</div>
       </div>
     </div>
 
-    <div id="scene-container"></div>
+    <div id="physics-status">
+      <span class="status-dot"></span>
+      <span id="physics-status-text">Physics loading</span>
+    </div>
+  </header>
 
-    <!-- INTRO -->
-    <div id="intro-panel" class="glass-panel">
-      <div class="eyebrow">WELCOME TO YOUR ISLAND</div>
+  <section id="intro-panel" class="glass-panel">
+    <div class="eyebrow">YOUR WORLD STARTS HERE</div>
+    <h1>Build your<br>own dinosaur park.</h1>
+    <p>
+      Shape the island, experiment with terrain,
+      and build the foundations of a living world.
+    </p>
+    <button id="enter-button" class="primary-button">
+      ENTER ISLAND <span>→</span>
+    </button>
+  </section>
 
-      <h1>A world waiting<br />to come alive.</h1>
+  <button id="terrain-toggle" class="glass-panel">
+    <span class="toggle-icon">⌁</span>
+    <span>TERRAIN TOOLS</span>
+    <span id="toggle-arrow">⌄</span>
+  </button>
 
-      <p>
-        Your island is ready for development.
-        Shape the landscape and prepare the land
-        for your future dinosaur park.
-      </p>
+  <aside id="terrain-panel" class="glass-panel">
+    <div class="panel-heading">
+      <div>
+        <div class="eyebrow">WORLD EDITOR</div>
+        <h2>Terrain tools</h2>
+      </div>
+      <button id="close-terrain" class="icon-button" aria-label="Close editor">×</button>
+    </div>
 
-      <button id="enter-button" class="primary-button">
-        ENTER ISLAND <span>↗</span>
+    <div class="tool-grid">
+      <button class="tool-button active" data-tool="camera">
+        <span>◉</span>
+        <small>Camera</small>
+      </button>
+
+      <button class="tool-button" data-tool="raise">
+        <span>＋</span>
+        <small>Raise</small>
+      </button>
+
+      <button class="tool-button" data-tool="lower">
+        <span>－</span>
+        <small>Lower</small>
+      </button>
+
+      <button class="tool-button" data-tool="flatten">
+        <span>▱</span>
+        <small>Flatten</small>
       </button>
     </div>
 
-    <!-- TERRAIN EDITOR -->
-    <div id="terrain-panel" class="glass-panel">
-
-      <div class="panel-heading">
-        <div>
-          <div class="eyebrow">LANDSCAPE TOOLS</div>
-          <div class="panel-title">Terrain Editor</div>
-        </div>
-
-        <div class="editor-indicator"></div>
-      </div>
-
-      <div class="tool-grid">
-
-        <button class="tool-button active" data-tool="camera">
-          <span class="tool-icon">◉</span>
-          <span>Camera</span>
-        </button>
-
-        <button class="tool-button" data-tool="raise">
-          <span class="tool-icon">↗</span>
-          <span>Raise</span>
-        </button>
-
-        <button class="tool-button" data-tool="lower">
-          <span class="tool-icon">↘</span>
-          <span>Lower</span>
-        </button>
-
-        <button class="tool-button" data-tool="flatten">
-          <span class="tool-icon">▰</span>
-          <span>Flatten</span>
-        </button>
-
-      </div>
-
-      <div class="editor-divider"></div>
-
-      <div class="setting-heading">
+    <div class="control-group">
+      <div class="control-label">
         <label for="brush-size">Brush size</label>
-        <span id="brush-size-value">10</span>
+        <span id="brush-size-value">12</span>
       </div>
+      <input id="brush-size" type="range" min="3" max="35" value="12">
+    </div>
 
-      <input
-        id="brush-size"
-        type="range"
-        min="3"
-        max="20"
-        step="1"
-        value="10"
-      />
-
-      <div class="setting-heading">
+    <div class="control-group">
+      <div class="control-label">
         <label for="brush-strength">Brush strength</label>
         <span id="brush-strength-value">1.5</span>
       </div>
-
-      <input
-        id="brush-strength"
-        type="range"
-        min="0.2"
-        max="3"
-        step="0.1"
-        value="1.5"
-      />
-
-      <div class="editor-divider"></div>
-
-      <button id="reset-terrain" class="reset-button">
-        <span>↺</span> RESET TERRAIN
-      </button>
-
-      <div id="tool-description">
-        Select a tool to start editing.
-      </div>
-
+      <input id="brush-strength" type="range" min="0.2" max="4" step="0.1" value="1.5">
     </div>
 
-    <!-- CAMERA HINT -->
-    <div id="controls-hint" class="glass-panel">
-      <div class="hint-title">CAMERA CONTROLS</div>
+    <div class="panel-divider"></div>
 
-      <div class="hint-row">
-        <span class="hint-key">DRAG</span>
-        <span>Rotate camera</span>
-      </div>
+    <div class="section-label">PHYSICS TESTING</div>
 
-      <div class="hint-row">
-        <span class="hint-key">SCROLL</span>
-        <span>Zoom in / out</span>
-      </div>
-
-      <div class="hint-row">
-        <span class="hint-key">RIGHT DRAG</span>
-        <span>Pan around</span>
-      </div>
-
-      <div class="hint-row">
-        <span class="hint-key">DOUBLE CLICK</span>
-        <span>Focus island</span>
-      </div>
+    <div class="physics-buttons">
+      <button id="drop-box" class="secondary-button">＋ Drop box</button>
+      <button id="drop-sphere" class="secondary-button">＋ Drop sphere</button>
     </div>
 
-    <!-- STATUS BAR -->
-    <div id="bottom-bar">
+    <button id="clear-objects" class="text-button">Clear test objects</button>
 
-      <div class="status-group">
-        <span class="status-dot"></span>
-        <span id="status-text">ISLAND INITIALIZED</span>
-      </div>
+    <div class="panel-divider"></div>
 
-      <div class="bottom-right">
-        TROPICAL ISLAND
-        <span class="separator">/</span>
-        DEVELOPMENT MODE
-      </div>
+    <button id="reset-terrain" class="reset-button">Reset terrain</button>
 
-    </div>
+    <p id="tool-description">
+      Camera mode: drag to rotate, scroll to zoom, right-drag to pan.
+    </p>
+  </aside>
 
-    <!-- LOADING -->
-    <div id="loading-screen">
-
-      <div class="loading-content">
-
-        <div class="loading-symbol">DP</div>
-
-        <div class="loading-title">
-          PREPARING YOUR ISLAND
-        </div>
-
-        <div class="loading-track">
-          <div id="loading-progress"></div>
-        </div>
-
-        <div id="loading-message">
-          Building the world...
-        </div>
-
-      </div>
-
-    </div>
-
+  <div id="bottom-hint">
+    <span>LEFT DRAG</span> Rotate camera
+    <span class="hint-divider">·</span>
+    <span>SCROLL</span> Zoom
+    <span class="hint-divider">·</span>
+    <span>RIGHT DRAG</span> Pan
   </div>
+
+  <div id="toast"></div>
+
+  <script type="module" src="app.js"></script>
 </body>
 </html>
