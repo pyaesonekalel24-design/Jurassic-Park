@@ -54,8 +54,7 @@ let islandGroup;
 let water;
 
 let terrainMesh;
-let terrainGeometry;
-
+let terrainFollowingObjects = [];
 let originalTerrainHeights;
 
 let brushPreview;
@@ -488,7 +487,7 @@ function createVegetation() {
     1
   );
 
-  const treeGroup = new THREE.Group();
+ const treeGroup = new THREE.Group();
 
   for (let i = 0; i < WORLD.treeCount; i++) {
     const angle = random() * Math.PI * 2;
@@ -556,7 +555,14 @@ function createVegetation() {
     tree.rotation.y =
       random() * Math.PI * 2;
 
-    treeGroup.add(tree);
+   treeGroup.add(tree);
+
+terrainFollowingObjects.push({
+  object: tree,
+  x: x,
+  z: z,
+  offsetY: 0
+});
   }
 
   islandGroup.add(treeGroup);
@@ -620,7 +626,14 @@ function createBushes(random) {
 
     bush.castShadow = true;
 
-    bushes.add(bush);
+   bushes.add(bush);
+
+terrainFollowingObjects.push({
+  object: bush,
+  x: x,
+  z: z,
+  offsetY: 0.65 * scale
+});
   }
 
   islandGroup.add(bushes);
@@ -1125,6 +1138,7 @@ function updateTerrainMesh() {
   terrainGeometry.computeBoundingSphere();
 
   terrainGeometry.computeBoundingBox();
+   updateTerrainFollowingObjects();
 }
 
 /* =========================================================
@@ -1227,66 +1241,76 @@ function setLoading(progress, message) {
    TERRAIN HEIGHT HELPERS
    ========================================================= */
 
+
 function getTerrainHeight(x, z) {
-  const hillA = gaussian(
-    x, z, -22, -14, 25, 31, 14
-  );
+  if (!terrainGeometry) return 0;
 
-  const hillB = gaussian(
-    x, z, 20, 7, 22, 25, 10
-  );
+  const positions =
+    terrainGeometry.attributes.position;
 
-  const hillC = gaussian(
-    x, z, -2, 32, 18, 19, 6
-  );
+  const size = WORLD.islandRadius * 2.35;
+  const halfSize = size / 2;
 
-  const ridge =
-    Math.max(
-      0,
-      Math.sin((x + z * 0.55) * 0.055)
-    ) * 2.0;
-
-  const smallNoise =
-    Math.sin(x * 0.19) *
-    Math.cos(z * 0.17) * 0.65 +
-    Math.sin((x + z) * 0.31) * 0.28;
-
-  return (
-    1.4 +
-    hillA +
-    hillB +
-    hillC +
-    ridge +
-    smallNoise
-  );
-}
-
-function gaussian(
-  x,
-  z,
-  centerX,
-  centerZ,
-  spreadX,
-  spreadZ,
-  height
-) {
-  const dx = (x - centerX) / spreadX;
-  const dz = (z - centerZ) / spreadZ;
-
-  return (
-    height *
-    Math.exp(-0.5 * (dx * dx + dz * dz))
-  );
-}
-
-function smoothstep(edge0, edge1, value) {
-  const t = THREE.MathUtils.clamp(
-    (value - edge0) / (edge1 - edge0),
+  const gridX = THREE.MathUtils.clamp(
+    ((x + halfSize) / size) * WORLD.terrainSegments,
     0,
-    1
+    WORLD.terrainSegments
   );
 
-  return t * t * (3 - 2 * t);
+  const gridZ = THREE.MathUtils.clamp(
+    ((z + halfSize) / size) * WORLD.terrainSegments,
+    0,
+    WORLD.terrainSegments
+  );
+
+  const x0 = Math.floor(gridX);
+  const z0 = Math.floor(gridZ);
+
+  const x1 = Math.min(
+    x0 + 1,
+    WORLD.terrainSegments
+  );
+
+  const z1 = Math.min(
+    z0 + 1,
+    WORLD.terrainSegments
+  );
+
+  const tx = gridX - x0;
+  const tz = gridZ - z0;
+
+  const a = positions.getY(
+    z0 * (WORLD.terrainSegments + 1) + x0
+  );
+
+  const b = positions.getY(
+    z0 * (WORLD.terrainSegments + 1) + x1
+  );
+
+  const c = positions.getY(
+    z1 * (WORLD.terrainSegments + 1) + x0
+  );
+
+  const d = positions.getY(
+    z1 * (WORLD.terrainSegments + 1) + x1
+  );
+
+  const top = THREE.MathUtils.lerp(a, b, tx);
+  const bottom = THREE.MathUtils.lerp(c, d, tx);
+
+  return THREE.MathUtils.lerp(top, bottom, tz);
+}
+
+function updateTerrainFollowingObjects() {
+  for (const item of terrainFollowingObjects) {
+    const groundY = getTerrainHeight(
+      item.x,
+      item.z
+    );
+
+    item.object.position.y =
+      groundY + item.offsetY;
+  }
 }
 
 /* =========================================================
