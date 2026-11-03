@@ -378,6 +378,7 @@ function createIsland() {
       vertexColors: true,
       roughness: 1,
       metalness: 0
+        side: THREE.DoubleSide
     });
 
   terrainMesh = new THREE.Mesh(
@@ -1014,124 +1015,405 @@ function resetTerrain() {
   showToast("Terrain restored");
 }
 
+
+/* =========================================================
+   PROCEDURAL T-REX MODEL
+   ========================================================= */
+
+function createTRexModel() {
+  const dinosaur = new THREE.Group();
+
+  const skin = new THREE.MeshStandardMaterial({
+    color: 0x65734b,
+    roughness: 0.92
+  });
+
+  const belly = new THREE.MeshStandardMaterial({
+    color: 0x9b916e,
+    roughness: 1
+  });
+
+  const darkSkin = new THREE.MeshStandardMaterial({
+    color: 0x394532,
+    roughness: 1
+  });
+
+  const mouthMaterial = new THREE.MeshStandardMaterial({
+    color: 0x542f2b,
+    roughness: 1
+  });
+
+  const teethMaterial = new THREE.MeshStandardMaterial({
+    color: 0xe5dfc5,
+    roughness: 0.8
+  });
+
+  const eyeMaterial = new THREE.MeshStandardMaterial({
+    color: 0xe2ad35,
+    roughness: 0.4
+  });
+
+  const pupilMaterial = new THREE.MeshStandardMaterial({
+    color: 0x17140e
+  });
+
+  function ellipsoid(parent, material, x, y, z, sx, sy, sz) {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 16, 12),
+      material
+    );
+
+    mesh.position.set(x, y, z);
+    mesh.scale.set(sx, sy, sz);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    parent.add(mesh);
+    return mesh;
+  }
+
+  function segment(parent, start, end, radiusTop, radiusBottom, material) {
+    const direction = new THREE.Vector3().subVectors(end, start);
+    const length = direction.length();
+
+    const mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        radiusTop,
+        radiusBottom,
+        length,
+        10
+      ),
+      material
+    );
+
+    mesh.position.copy(start).add(end).multiplyScalar(0.5);
+
+    mesh.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      direction.normalize()
+    );
+
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    parent.add(mesh);
+    return mesh;
+  }
+
+  // Main muscular body
+  ellipsoid(dinosaur, skin, 0, 0, 0, 1.05, 0.95, 2.05);
+
+  // Belly
+  ellipsoid(dinosaur, belly, 0, -0.52, 0.1, 0.83, 0.43, 1.55);
+
+  // Back muscle and shoulder hump
+  ellipsoid(dinosaur, darkSkin, 0, 0.73, -0.15, 0.88, 0.27, 1.15);
+
+  // Neck
+  segment(
+    dinosaur,
+    new THREE.Vector3(0, 0.25, 1.2),
+    new THREE.Vector3(0, 0.65, 2.05),
+    0.55,
+    0.75,
+    skin
+  );
+
+  // Head
+  const head = new THREE.Group();
+  head.position.set(0, 0.72, 2.05);
+  dinosaur.add(head);
+
+  ellipsoid(head, skin, 0, 0.12, 0.25, 0.72, 0.65, 0.85);
+
+  // Long snout
+  ellipsoid(head, skin, 0, -0.02, 0.9, 0.55, 0.43, 0.85);
+
+  // Lower jaw
+  const jaw = new THREE.Group();
+  jaw.position.set(0, -0.28, 0.55);
+  head.add(jaw);
+
+  ellipsoid(jaw, mouthMaterial, 0, -0.05, 0.28, 0.48, 0.12, 0.85);
+  ellipsoid(jaw, skin, 0, -0.19, 0.3, 0.52, 0.18, 0.85);
+
+  // Teeth
+  for (let i = 0; i < 7; i++) {
+    const x = (i - 3) * 0.125;
+
+    const tooth = new THREE.Mesh(
+      new THREE.ConeGeometry(0.065, 0.19, 8),
+      teethMaterial
+    );
+
+    tooth.position.set(x, -0.02, 0.0 + i * 0.18);
+    tooth.rotation.x = Math.PI;
+    jaw.add(tooth);
+
+    const upperTooth = tooth.clone();
+    upperTooth.position.y = -0.15;
+    upperTooth.rotation.x = 0;
+    head.add(upperTooth);
+  }
+
+  // Eyes
+  for (const side of [-1, 1]) {
+    ellipsoid(
+      head,
+      darkSkin,
+      side * 0.57,
+      0.38,
+      0.43,
+      0.19,
+      0.2,
+      0.19
+    );
+
+    ellipsoid(
+      head,
+      eyeMaterial,
+      side * 0.64,
+      0.39,
+      0.47,
+      0.105,
+      0.12,
+      0.12
+    );
+
+    ellipsoid(
+      head,
+      pupilMaterial,
+      side * 0.69,
+      0.39,
+      0.49,
+      0.045,
+      0.075,
+      0.075
+    );
+
+    // Tiny arms
+    const arm = new THREE.Group();
+    arm.position.set(side * 0.78, -0.05, 1.0);
+    dinosaur.add(arm);
+
+    segment(
+      arm,
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(side * 0.12, -0.32, 0.12),
+      0.15,
+      0.12,
+      skin
+    );
+
+    segment(
+      arm,
+      new THREE.Vector3(side * 0.12, -0.32, 0.12),
+      new THREE.Vector3(side * 0.1, -0.48, 0.2),
+      0.11,
+      0.08,
+      skin
+    );
+
+    // Two little claws
+    for (let claw = 0; claw < 2; claw++) {
+      ellipsoid(
+        arm,
+        teethMaterial,
+        side * (0.1 + claw * 0.08),
+        -0.51,
+        0.23,
+        0.035,
+        0.045,
+        0.09
+      );
+    }
+  }
+
+  // Powerful animated legs
+  const legs = [];
+
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Group();
+    leg.position.set(side * 0.62, -0.55, 0.2);
+    dinosaur.add(leg);
+
+    ellipsoid(leg, skin, 0, -0.32, 0, 0.43, 0.72, 0.48);
+
+    segment(
+      leg,
+      new THREE.Vector3(0, -0.5, 0),
+      new THREE.Vector3(0, -1.05, 0.05),
+      0.27,
+      0.2,
+      skin
+    );
+
+    // Three-toed foot
+    ellipsoid(
+      leg,
+      skin,
+      0,
+      -1.13,
+      0.28,
+      0.34,
+      0.16,
+      0.43
+    );
+
+    for (let toe = -1; toe <= 1; toe++) {
+      ellipsoid(
+        leg,
+        skin,
+        toe * 0.17,
+        -1.15,
+        0.58,
+        0.12,
+        0.11,
+        0.24
+      );
+
+      ellipsoid(
+        leg,
+        teethMaterial,
+        toe * 0.17,
+        -1.15,
+        0.77,
+        0.065,
+        0.07,
+        0.12
+      );
+    }
+
+    legs.push(leg);
+  }
+
+  // Long tapered tail
+  segment(
+    dinosaur,
+    new THREE.Vector3(0, 0.05, -1.45),
+    new THREE.Vector3(0, 0.0, -2.8),
+    0.65,
+    0.38,
+    skin
+  );
+
+  segment(
+    dinosaur,
+    new THREE.Vector3(0, 0.0, -2.8),
+    new THREE.Vector3(0, -0.12, -4.2),
+    0.38,
+    0.035,
+    skin
+  );
+
+  // Dark markings along the back
+  for (let i = 0; i < 8; i++) {
+    const z = 1.1 - i * 0.38;
+
+    ellipsoid(
+      dinosaur,
+      darkSkin,
+      0,
+      0.9,
+      z,
+      0.22,
+      0.12,
+      0.19
+    );
+  }
+
+  dinosaur.traverse((object) => {
+    if (object.isMesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }
+  });
+
+  return {
+    group: dinosaur,
+    legs,
+    head,
+    jaw
+  };
+}
+
 /* =========================================================
    PHYSICAL TEST OBJECTS
    ========================================================= */
+
 
 function spawnPhysicsObject(type) {
   const x = (Math.random() - 0.5) * 35;
   const z = (Math.random() - 0.5) * 35;
 
   const groundY = getHeightAt(x, z);
-
   const startY = groundY + 35;
 
-  let mesh;
-  let bodyDescription;
-  let colliderDescription;
+  const dinosaur = createTRexModel();
 
-  if (type === "box") {
-    const size = 2.5;
+  const bodyDescription =
+    RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(x, startY, z)
+      .setCanSleep(false)
+      .setLinearDamping(0.5)
+      .setAngularDamping(2);
 
-    const geometry = new THREE.BoxGeometry(
-      size,
-      size,
-      size
-    );
+  const colliderDescription =
+    RAPIER.ColliderDesc.cuboid(1.0, 1.25, 2.3)
+      .setFriction(1.0)
+      .setRestitution(0.0);
 
-    const material =
-      new THREE.MeshStandardMaterial({
-        color: 0xb18b62,
-        roughness: 0.7
-      });
-
-    mesh = new THREE.Mesh(geometry, material);
-
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
-    bodyDescription =
-      RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(x, startY, z)
-        .setCanSleep(true);
-
-    colliderDescription =
-      RAPIER.ColliderDesc.cuboid(
-        size / 2,
-        size / 2,
-        size / 2
-      );
-
-  } else {
-    const radius = 1.5;
-
-    const geometry =
-      new THREE.SphereGeometry(radius, 20, 16);
-
-    const material =
-      new THREE.MeshStandardMaterial({
-        color: 0x8bacc0,
-        roughness: 0.45
-      });
-
-    mesh = new THREE.Mesh(geometry, material);
-
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
-    bodyDescription =
-      RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(x, startY, z)
-        .setCanSleep(true);
-
-    colliderDescription =
-      RAPIER.ColliderDesc.ball(radius);
-  }
-
-  colliderDescription.setFriction(0.8);
-  colliderDescription.setRestitution(0.15);
-
-  const body = physicsWorld.createRigidBody(
-    bodyDescription
-  );
+  const body = physicsWorld.createRigidBody(bodyDescription);
 
   physicsWorld.createCollider(
     colliderDescription,
     body
   );
 
-  scene.add(mesh);
+  scene.add(dinosaur.group);
 
   physicsObjects.push({
-    mesh,
-    body
+    mesh: dinosaur.group,
+    body,
+    legs: dinosaur.legs,
+    head: dinosaur.head,
+    jaw: dinosaur.jaw,
+    age: 0,
+    landed: false,
+    direction: new THREE.Vector3(1, 0, 0),
+    nextTurn: 0
   });
 
-  showToast(
-    type === "box"
-      ? "Physical box spawned"
-      : "Physical sphere spawned"
-  );
+  showToast("A T-Rex has entered the island!");
 }
 
+
+/* =========================================================
+   PHYSICS UPDATE
+   ========================================================= */
 function clearPhysicsObjects() {
   for (const item of physicsObjects) {
     physicsWorld.removeRigidBody(item.body);
 
     scene.remove(item.mesh);
 
-    item.mesh.geometry.dispose();
-    item.mesh.material.dispose();
+    item.mesh.traverse((object) => {
+      if (object.isMesh) {
+        object.geometry.dispose();
+
+        if (Array.isArray(object.material)) {
+          object.material.forEach(material => material.dispose());
+        } else {
+          object.material.dispose();
+        }
+      }
+    });
   }
 
   physicsObjects = [];
 
-  showToast("Test objects cleared");
+  showToast("Dinosaurs cleared");
 }
-
-/* =========================================================
-   PHYSICS UPDATE
-   ========================================================= */
 
 function updatePhysics(deltaTime) {
   accumulator += Math.min(deltaTime, 0.1);
@@ -1143,13 +1425,87 @@ function updatePhysics(deltaTime) {
 
   for (const item of physicsObjects) {
     const position = item.body.translation();
-    const rotation = item.body.rotation();
 
     item.mesh.position.set(
       position.x,
       position.y,
       position.z
     );
+
+    if (!item.landed) {
+      const groundY = getHeightAt(position.x, position.z);
+
+      if (position.y <= groundY + 1.4) {
+        item.landed = true;
+        item.age = 0;
+
+        showToast("T-Rex landed!");
+      }
+    }
+
+    if (item.landed) {
+      item.age += deltaTime;
+
+      // Choose a new walking direction periodically.
+      if (item.age >= item.nextTurn) {
+        const angle = Math.random() * Math.PI * 2;
+
+        item.direction.set(
+          Math.sin(angle),
+          0,
+          Math.cos(angle)
+        );
+
+        item.nextTurn = item.age + 3 + Math.random() * 4;
+      }
+
+      const speed = 2.2;
+
+      item.body.setLinvel(
+        {
+          x: item.direction.x * speed,
+          y: position.y === undefined ? 0 : item.body.linvel().y,
+          z: item.direction.z * speed
+        },
+        true
+      );
+
+      // Turn the physics body in the walking direction.
+      const yaw = Math.atan2(
+        item.direction.x,
+        item.direction.z
+      );
+
+      item.body.setRotation(
+        {
+          x: 0,
+          y: Math.sin(yaw / 2),
+          z: 0,
+          w: Math.cos(yaw / 2)
+        },
+        true
+      );
+
+      // Walking animation.
+      const walkCycle = item.age * 5;
+
+      item.legs[0].rotation.x =
+        Math.sin(walkCycle) * 0.45;
+
+      item.legs[1].rotation.x =
+        Math.sin(walkCycle + Math.PI) * 0.45;
+
+      item.mesh.rotation.z =
+        Math.sin(walkCycle * 2) * 0.025;
+
+      item.head.rotation.x =
+        Math.sin(walkCycle * 0.5) * 0.035;
+
+      item.jaw.rotation.x =
+        Math.sin(walkCycle * 0.7) * 0.025;
+    }
+
+    const rotation = item.body.rotation();
 
     item.mesh.quaternion.set(
       rotation.x,
@@ -1159,6 +1515,7 @@ function updatePhysics(deltaTime) {
     );
   }
 }
+
 
 /* =========================================================
    USER INTERFACE
