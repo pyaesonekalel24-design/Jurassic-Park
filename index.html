@@ -1,0 +1,105 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#101914" />
+  <title>Dinosaur Park — Prototype 01</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module" src="app.js"></script>
+</head>
+
+<body>
+  <div id="game">
+    <div id="top-bar">
+      <div class="brand">
+        <div class="brand-mark">JP</div>
+        <div>
+          <div class="brand-title">DINOSAUR PARK</div>
+          <div class="brand-subtitle">ISLAND DEVELOPMENT PROGRAM</div>
+        </div>
+      </div>
+
+      <div class="prototype-label">
+        PROTOTYPE 01 <span>•</span> WORLD FOUNDATION
+      </div>
+    </div>
+
+    <div id="scene-container"></div>
+
+    <div id="intro-panel" class="glass-panel">
+      <div class="eyebrow">WELCOME TO YOUR ISLAND</div>
+
+      <h1>A world waiting<br />to come alive.</h1>
+
+      <p>
+        This is the first foundation of your park.
+        Explore the island, inspect the terrain, and get a feel for the camera.
+      </p>
+
+      <button id="enter-button" class="primary-button">
+        ENTER ISLAND <span>↗</span>
+      </button>
+    </div>
+
+    <div id="controls-hint" class="glass-panel">
+      <div class="hint-title">CAMERA CONTROLS</div>
+
+      <div class="hint-row">
+        <span class="hint-key">DRAG</span>
+        <span>Rotate camera</span>
+      </div>
+
+      <div class="hint-row">
+        <span class="hint-key">SCROLL</span>
+        <span>Zoom in / out</span>
+      </div>
+
+      <div class="hint-row">
+        <span class="hint-key">RIGHT DRAG</span>
+        <span>Pan around</span>
+      </div>
+
+      <div class="hint-row">
+        <span class="hint-key">DOUBLE CLICK</span>
+        <span>Focus island</span>
+      </div>
+    </div>
+
+    <div id="bottom-bar">
+      <div class="status-group">
+        <span class="status-dot"></span>
+        <span id="status-text">ISLAND INITIALIZED</span>
+      </div>
+
+      <div class="bottom-right">
+        TROPICAL ISLAND <span class="separator">/</span> DEVELOPMENT MODE
+      </div>
+    </div>
+
+    <div id="loading-screen">
+      <div class="loading-content">
+        <div class="loading-symbol">JP</div>
+        <div class="loading-title">PREPARING YOUR ISLAND</div>
+
+        <div class="loading-track">
+          <div id="loading-progress"></div>
+        </div>
+
+        <div id="loading-message">Building the world...</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
