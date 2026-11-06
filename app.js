@@ -158,7 +158,7 @@ function initializeThree() {
   });
 
   renderer.setPixelRatio(
-    Math.min(window.devicePixelRatio, 1.75)
+    Math.min(window.devicePixelRatio, 1.25)
   );
 
   renderer.setSize(
@@ -205,8 +205,8 @@ function initializeThree() {
   sun.position.set(-250, 400, -150);
   sun.castShadow = true;
 
-  sun.shadow.mapSize.set(2048, 2048);
-
+ sun.shadow.mapSize.set(1024, 1024);
+   
   sun.shadow.camera.left = -400;
   sun.shadow.camera.right = 400;
   sun.shadow.camera.top = 400;
