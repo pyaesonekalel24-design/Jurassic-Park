@@ -1395,19 +1395,56 @@ function spawnPhysicsObject(type) {
     MODEL_PATH,
 
     function (gltf) {
-      const model = gltf.scene;
+      
+const model = gltf.scene;
 
-      // Initial model scale.
-      model.scale.setScalar(1);
+// Initial model scale.
+model.scale.setScalar(1);
 
-      dinosaur.add(model);
+// Measure the actual dinosaur model.
+const box = new THREE.Box3().setFromObject(model);
+const center = new THREE.Vector3();
 
-      model.traverse(function (child) {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
+box.getCenter(center);
+
+// Center the model and align its feet
+// with the bottom of the physics collider.
+model.position.set(
+  -center.x,
+  -box.min.y - 1.25,
+  -center.z
+);
+
+console.log("T-Rex dimensions:", box.getSize(new THREE.Vector3()));
+
+dinosaur.add(model);
+     
+model.traverse(function (child) {
+  if (child.isMesh) {
+    child.castShadow = true;
+    child.receiveShadow = true;
+
+    console.log("Mesh:", child.name);
+
+    if (Array.isArray(child.material)) {
+      child.material.forEach(material => {
+        console.log(
+          "Material:",
+          material.name,
+          "Texture:",
+          material.map?.image?.src
+        );
       });
+    } else {
+      console.log(
+        "Material:",
+        child.material.name,
+        "Texture:",
+        child.material.map?.image?.src
+      );
+    }
+  }
+});
 
       // Load included animations.
       if (gltf.animations.length > 0) {
