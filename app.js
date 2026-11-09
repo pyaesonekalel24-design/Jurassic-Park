@@ -1392,104 +1392,57 @@ function spawnPhysicsObject(type) {
   const MODEL_PATH = "models/trex/scene.gltf";
 
   loader.load(
-    MODEL_PATH,
+  MODEL_PATH,
+  function (gltf) {
+    const model = gltf.scene;
 
-    function (gltf) {
-      
-const model = gltf.scene;
+    // Scale (adjust this number if the dino is too big/small)
+    model.scale.setScalar(1.0);
 
-// Initial model scale.
-model.scale.setScalar(1);
+    // Center the model and put its feet on the ground
+    const box = new THREE.Box3().setFromObject(model);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
 
-// Measure the actual dinosaur model.
-const box = new THREE.Box3().setFromObject(model);
-const center = new THREE.Vector3();
+    model.position.set(
+      -center.x,
+      -box.min.y,
+      -center.z
+    );
 
-box.getCenter(center);
+    // Enable shadows
+    model.traverse(function (child) {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
 
-// Center the model and align its feet
-// with the bottom of the physics collider.
-model.position.set(
-  -center.x,
-  -box.min.y - 1.25,
-  -center.z
-);
+    dinosaur.add(model);
 
-console.log("T-Rex dimensions:", box.getSize(new THREE.Vector3()));
+    // ===== Animation =====
+    if (gltf.animations && gltf.animations.length > 0) {
+      const mixer = new THREE.AnimationMixer(model);
 
-dinosaur.add(model);
-     
-model.traverse(function (child) {
-  if (child.isMesh) {
-    child.castShadow = true;
-    child.receiveShadow = true;
+      // Play the first animation (usually "Walk" or "Idle")
+      const action = mixer.clipAction(gltf.animations[0]);
+      action.play();
 
-    console.log("Mesh:", child.name);
+      dinosaurData.mixer = mixer;
 
-    if (Array.isArray(child.material)) {
-      child.material.forEach(material => {
-        console.log(
-          "Material:",
-          material.name,
-          "Texture:",
-          material.map?.image?.src
-        );
+      console.log("Available animations:");
+      gltf.animations.forEach((clip, i) => {
+        console.log(i, clip.name, "→", clip.duration.toFixed(2) + "s");
       });
     } else {
-      console.log(
-        "Material:",
-        child.material.name,
-        "Texture:",
-        child.material.map?.image?.src
-      );
+      console.warn("This T-Rex model has no animations.");
     }
+  },
+  undefined,
+  function (error) {
+    console.error("Failed to load T-Rex model:", error);
   }
-});
-
-      // Load included animations.
-     
-console.log("===== DINOSAUR ANIMATIONS =====");
-
-gltf.animations.forEach((clip, index) => {
-  console.log(
-    "Animation:",
-    index,
-    clip.name,
-    "Duration:",
-    clip.duration,
-    "Tracks:",
-    clip.tracks.map(track => track.name)
-  );
-});
-
-console.log("===== DINOSAUR MATERIALS =====");
-
-model.traverse(function (child) {
-  if (!child.isMesh) return;
-
-  const materials = Array.isArray(child.material)
-    ? child.material
-    : [child.material];
-
-  materials.forEach(material => {
-    console.log("Material:", material.name);
-    console.log("Color:", material.color);
-    console.log("Map:", material.map);
-    console.log("Normal map:", material.normalMap);
-  });
-});
-
-// Temporarily play the first animation as before.
-if (gltf.animations.length > 0) {
-  const mixer = new THREE.AnimationMixer(model);
-
-  const action = mixer.clipAction(gltf.animations[0]);
-
-  action.play();
-
-  dinosaurData.mixer = mixer;
-}
-
+);
 
 /* =========================================================
    PHYSICS UPDATE
