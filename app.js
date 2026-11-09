@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import RAPIER from "@dimforge/rapier3d-compat";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 /* =========================================================
    WORLD SETTINGS
@@ -1340,7 +1341,6 @@ function createTRexModel() {
 /* =========================================================
    PHYSICAL TEST OBJECTS
    ========================================================= */
-
 
 function spawnPhysicsObject(type) {
   const x = (Math.random() - 0.5) * 35;
