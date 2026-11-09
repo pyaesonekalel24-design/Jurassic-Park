@@ -1392,57 +1392,103 @@ function spawnPhysicsObject(type) {
   const MODEL_PATH = "models/trex/scene.gltf";
 
   loader.load(
-  MODEL_PATH,
-  function (gltf) {
-    const model = gltf.scene;
+    MODEL_PATH,
 
-    // Scale (adjust this number if the dino is too big/small)
-    model.scale.setScalar(1.0);
+    function (gltf) {
+      
+const model = gltf.scene;
 
-    // Center the model and put its feet on the ground
-    const box = new THREE.Box3().setFromObject(model);
-    const center = new THREE.Vector3();
-    box.getCenter(center);
+// Initial model scale.
+model.scale.setScalar(1);
 
-    model.position.set(
-      -center.x,
-      -box.min.y,
-      -center.z
-    );
+// Measure the actual dinosaur model.
+const box = new THREE.Box3().setFromObject(model);
+const center = new THREE.Vector3();
 
-    // Enable shadows
-    model.traverse(function (child) {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
+box.getCenter(center);
 
-    dinosaur.add(model);
+// Center the model and align its feet
+// with the bottom of the physics collider.
+model.position.set(
+  -center.x,
+  -box.min.y - 1.25,
+  -center.z
+);
 
-    // ===== Animation =====
-    if (gltf.animations && gltf.animations.length > 0) {
-      const mixer = new THREE.AnimationMixer(model);
+console.log("T-Rex dimensions:", box.getSize(new THREE.Vector3()));
 
-      // Play the first animation (usually "Walk" or "Idle")
-      const action = mixer.clipAction(gltf.animations[0]);
-      action.play();
+dinosaur.add(model);
+     
+model.traverse(function (child) {
+  if (child.isMesh) {
+    child.castShadow = true;
+    child.receiveShadow = true;
 
-      dinosaurData.mixer = mixer;
+    console.log("Mesh:", child.name);
 
-      console.log("Available animations:");
-      gltf.animations.forEach((clip, i) => {
-        console.log(i, clip.name, "→", clip.duration.toFixed(2) + "s");
+    if (Array.isArray(child.material)) {
+      child.material.forEach(material => {
+        console.log(
+          "Material:",
+          material.name,
+          "Texture:",
+          material.map?.image?.src
+        );
       });
     } else {
-      console.warn("This T-Rex model has no animations.");
+      console.log(
+        "Material:",
+        child.material.name,
+        "Texture:",
+        child.material.map?.image?.src
+      );
     }
-  },
-  undefined,
-  function (error) {
-    console.error("Failed to load T-Rex model:", error);
   }
-);
+});
+
+      // Load included animations.
+      if (gltf.animations.length > 0) {
+        const mixer =
+          new THREE.AnimationMixer(model);
+
+        gltf.animations.forEach(function (clip) {
+          console.log("Animation found:", clip.name);
+        });
+
+        const action = mixer.clipAction(
+          gltf.animations[0]
+        );
+
+        action.play();
+
+        dinosaurData.mixer = mixer;
+      } else {
+        console.warn("No animations found in T-Rex model.");
+      }
+
+      console.log("T-Rex loaded successfully!");
+    },
+
+    undefined,
+
+    function (error) {
+      console.error("T-Rex loading failed:", error);
+
+      physicsWorld.removeRigidBody(body);
+      scene.remove(dinosaur);
+
+      const index = physicsObjects.indexOf(dinosaurData);
+
+      if (index !== -1) {
+        physicsObjects.splice(index, 1);
+      }
+
+      showToast("T-Rex model failed to load.");
+    }
+  );
+
+  showToast("A T-Rex has entered the island!");
+}
 
 /* =========================================================
    PHYSICS UPDATE
