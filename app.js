@@ -1447,48 +1447,49 @@ model.traverse(function (child) {
 });
 
       // Load included animations.
-      if (gltf.animations.length > 0) {
-        const mixer =
-          new THREE.AnimationMixer(model);
+     
+console.log("===== DINOSAUR ANIMATIONS =====");
 
-        gltf.animations.forEach(function (clip) {
-          console.log("Animation found:", clip.name);
-        });
-
-        const action = mixer.clipAction(
-          gltf.animations[0]
-        );
-
-        action.play();
-
-        dinosaurData.mixer = mixer;
-      } else {
-        console.warn("No animations found in T-Rex model.");
-      }
-
-      console.log("T-Rex loaded successfully!");
-    },
-
-    undefined,
-
-    function (error) {
-      console.error("T-Rex loading failed:", error);
-
-      physicsWorld.removeRigidBody(body);
-      scene.remove(dinosaur);
-
-      const index = physicsObjects.indexOf(dinosaurData);
-
-      if (index !== -1) {
-        physicsObjects.splice(index, 1);
-      }
-
-      showToast("T-Rex model failed to load.");
-    }
+gltf.animations.forEach((clip, index) => {
+  console.log(
+    "Animation:",
+    index,
+    clip.name,
+    "Duration:",
+    clip.duration,
+    "Tracks:",
+    clip.tracks.map(track => track.name)
   );
+});
 
-  showToast("A T-Rex has entered the island!");
+console.log("===== DINOSAUR MATERIALS =====");
+
+model.traverse(function (child) {
+  if (!child.isMesh) return;
+
+  const materials = Array.isArray(child.material)
+    ? child.material
+    : [child.material];
+
+  materials.forEach(material => {
+    console.log("Material:", material.name);
+    console.log("Color:", material.color);
+    console.log("Map:", material.map);
+    console.log("Normal map:", material.normalMap);
+  });
+});
+
+// Temporarily play the first animation as before.
+if (gltf.animations.length > 0) {
+  const mixer = new THREE.AnimationMixer(model);
+
+  const action = mixer.clipAction(gltf.animations[0]);
+
+  action.play();
+
+  dinosaurData.mixer = mixer;
 }
+
 
 /* =========================================================
    PHYSICS UPDATE
