@@ -1342,6 +1342,7 @@ function createTRexModel() {
    PHYSICAL TEST OBJECTS
    ========================================================= */
 
+
 function spawnPhysicsObject(type) {
   const x = (Math.random() - 0.5) * 35;
   const z = (Math.random() - 0.5) * 35;
@@ -1349,7 +1350,8 @@ function spawnPhysicsObject(type) {
   const groundY = getHeightAt(x, z);
   const startY = groundY + 35;
 
-  const dinosaur = createTRexModel();
+  // Physics-controlled dinosaur wrapper.
+  const dinosaur = new THREE.Group();
 
   const bodyDescription =
     RAPIER.RigidBodyDesc.dynamic()
@@ -1363,30 +1365,93 @@ function spawnPhysicsObject(type) {
       .setFriction(1.0)
       .setRestitution(0.0);
 
-  const body = physicsWorld.createRigidBody(bodyDescription);
+  const body =
+    physicsWorld.createRigidBody(bodyDescription);
 
   physicsWorld.createCollider(
     colliderDescription,
     body
   );
 
-  scene.add(dinosaur.group);
+  scene.add(dinosaur);
 
-  physicsObjects.push({
-    mesh: dinosaur.group,
+  const dinosaurData = {
+    mesh: dinosaur,
     body,
-    legs: dinosaur.legs,
-    head: dinosaur.head,
-    jaw: dinosaur.jaw,
+    mixer: null,
     age: 0,
     landed: false,
     direction: new THREE.Vector3(1, 0, 0),
     nextTurn: 0
-  });
+  };
+
+  physicsObjects.push(dinosaurData);
+
+  const loader = new GLTFLoader();
+
+  const MODEL_PATH = "models/trex/scene.gltf";
+
+  loader.load(
+    MODEL_PATH,
+
+    function (gltf) {
+      const model = gltf.scene;
+
+      // Initial model scale.
+      model.scale.setScalar(1);
+
+      dinosaur.add(model);
+
+      model.traverse(function (child) {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      // Load included animations.
+      if (gltf.animations.length > 0) {
+        const mixer =
+          new THREE.AnimationMixer(model);
+
+        gltf.animations.forEach(function (clip) {
+          console.log("Animation found:", clip.name);
+        });
+
+        const action = mixer.clipAction(
+          gltf.animations[0]
+        );
+
+        action.play();
+
+        dinosaurData.mixer = mixer;
+      } else {
+        console.warn("No animations found in T-Rex model.");
+      }
+
+      console.log("T-Rex loaded successfully!");
+    },
+
+    undefined,
+
+    function (error) {
+      console.error("T-Rex loading failed:", error);
+
+      physicsWorld.removeRigidBody(body);
+      scene.remove(dinosaur);
+
+      const index = physicsObjects.indexOf(dinosaurData);
+
+      if (index !== -1) {
+        physicsObjects.splice(index, 1);
+      }
+
+      showToast("T-Rex model failed to load.");
+    }
+  );
 
   showToast("A T-Rex has entered the island!");
 }
-
 
 /* =========================================================
    PHYSICS UPDATE
@@ -1415,6 +1480,7 @@ function clearPhysicsObjects() {
   showToast("Dinosaurs cleared");
 }
 
+
 function updatePhysics(deltaTime) {
   accumulator += Math.min(deltaTime, 0.1);
 
@@ -1433,7 +1499,10 @@ function updatePhysics(deltaTime) {
     );
 
     if (!item.landed) {
-      const groundY = getHeightAt(position.x, position.z);
+      const groundY = getHeightAt(
+        position.x,
+        position.z
+      );
 
       if (position.y <= groundY + 1.4) {
         item.landed = true;
@@ -1456,7 +1525,8 @@ function updatePhysics(deltaTime) {
           Math.cos(angle)
         );
 
-        item.nextTurn = item.age + 3 + Math.random() * 4;
+        item.nextTurn =
+          item.age + 3 + Math.random() * 4;
       }
 
       const speed = 2.2;
@@ -1464,13 +1534,13 @@ function updatePhysics(deltaTime) {
       item.body.setLinvel(
         {
           x: item.direction.x * speed,
-          y: position.y === undefined ? 0 : item.body.linvel().y,
+          y: item.body.linvel().y,
           z: item.direction.z * speed
         },
         true
       );
 
-      // Turn the physics body in the walking direction.
+      // Turn the physics body in its walking direction.
       const yaw = Math.atan2(
         item.direction.x,
         item.direction.z
@@ -1485,26 +1555,14 @@ function updatePhysics(deltaTime) {
         },
         true
       );
-
-      // Walking animation.
-      const walkCycle = item.age * 5;
-
-      item.legs[0].rotation.x =
-        Math.sin(walkCycle) * 0.45;
-
-      item.legs[1].rotation.x =
-        Math.sin(walkCycle + Math.PI) * 0.45;
-
-      item.mesh.rotation.z =
-        Math.sin(walkCycle * 2) * 0.025;
-
-      item.head.rotation.x =
-        Math.sin(walkCycle * 0.5) * 0.035;
-
-      item.jaw.rotation.x =
-        Math.sin(walkCycle * 0.7) * 0.025;
     }
 
+    // Update the downloaded model's animation.
+    if (item.mixer) {
+      item.mixer.update(deltaTime);
+    }
+
+    // Sync visual dinosaur with physics rotation.
     const rotation = item.body.rotation();
 
     item.mesh.quaternion.set(
@@ -1515,7 +1573,6 @@ function updatePhysics(deltaTime) {
     );
   }
 }
-
 
 /* =========================================================
    USER INTERFACE
