@@ -383,15 +383,15 @@ const grassDiffuse = textureLoader.load(
 );
 
 const grassNormal = textureLoader.load(
-  "textures/grass/rocky_terrain_02_nor_gl_2k.png"
+  "model/map/textures/rocky_terrain_02_nor_gl_2k.png"
 );
 
 const grassRoughness = textureLoader.load(
-  "textures/grass/rocky_terrain_02_rough_2k.png"
+  "model/map/textures/rocky_terrain_02_rough_2k.png"
 );
 
 const grassAO = textureLoader.load(
-  "textures/grass/rocky_terrain_02_ao_2k.png"
+  "model/map/textures/rocky_terrain_02_ao_2k.png"
 );
 
 // Texture colour correction
