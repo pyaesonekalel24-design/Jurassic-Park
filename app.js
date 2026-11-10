@@ -449,8 +449,8 @@ const terrainMaterial =
     terrainMaterial
   );
 
-  terrainMesh.receiveShadow = true;
-  terrainMesh.castShadow = true;
+  terrainMesh.receiveShadow = false;
+  terrainMesh.castShadow = false;
 
   scene.add(terrainMesh);
 
@@ -626,26 +626,7 @@ function updateTerrainMesh() {
   const positions =
     terrainGeometry.attributes.position;
 
-  const colors =
-    terrainGeometry.attributes.color;
-
-  const color = new THREE.Color();
-
-  for (let i = 0; i < positions.count; i++) {
-    const height = positions.getY(i);
-
-    getTerrainColor(height, color);
-
-    colors.setXYZ(
-      i,
-      color.r,
-      color.g,
-      color.b
-    );
-  }
-
   positions.needsUpdate = true;
-  colors.needsUpdate = true;
 
   terrainGeometry.computeVertexNormals();
   terrainGeometry.computeBoundingSphere();
