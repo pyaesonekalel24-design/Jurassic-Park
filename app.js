@@ -270,10 +270,25 @@ function createIsland() {
 
   terrainGeometry.rotateX(-Math.PI / 2);
 
-  const positions =
-    terrainGeometry.attributes.position;
+const positions = terrainGeometry.attributes.position;
+const uvs = terrainGeometry.attributes.uv;
 
-  const colors = [];
+const textureTileSize = 20;
+
+for (let i = 0; i < positions.count; i++) {
+  const x = positions.getX(i);
+  const z = positions.getZ(i);
+
+  uvs.setXY(
+    i,
+    x / textureTileSize,
+    z / textureTileSize
+  );
+}
+
+uvs.needsUpdate = true;
+
+    const colors = [];
 
   originalTerrainHeights =
     new Float32Array(positions.count);
@@ -399,7 +414,7 @@ grassDiffuse.colorSpace = THREE.SRGBColorSpace;
 
 // Repeat textures across the island
 const terrainSize = WORLD.islandRadius * 2.35;
-const textureRepeat = terrainSize / 20;
+const textureRepeat = 1;
 
 const terrainTextures = [
   grassDiffuse,
