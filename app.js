@@ -379,19 +379,19 @@ function createIsland() {
 const textureLoader = new THREE.TextureLoader();
 
 const grassDiffuse = textureLoader.load(
-  "model/map/textures/rocky_terrain_02_diff_2k.jpg"
+  "/Jurassic-Park/model/map/textures/rocky_terrain_02_diff_2k.jpg"
 );
 
 const grassNormal = textureLoader.load(
-  "model/map/textures/rocky_terrain_02_nor_gl_2k.png"
+  "/Jurassic-Park/model/map/textures/rocky_terrain_02_nor_gl_2k.png"
 );
 
 const grassRoughness = textureLoader.load(
-  "model/map/textures/rocky_terrain_02_rough_2k.png"
+  "/Jurassic-Park/model/map/textures/rocky_terrain_02_rough_2k.png"
 );
 
 const grassAO = textureLoader.load(
-  "model/map/textures/rocky_terrain_02_ao_2k.png"
+  "/Jurassic-Park/model/map/textures/rocky_terrain_02_ao_2k.png"
 );
 
 // Texture colour correction
