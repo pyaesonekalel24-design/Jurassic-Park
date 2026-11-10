@@ -374,11 +374,73 @@ function createIsland() {
   terrainGeometry.computeVertexNormals();
   terrainGeometry.computeBoundingSphere();
 
+
+// TERRAIN TEXTURES
+const textureLoader = new THREE.TextureLoader();
+
+const grassDiffuse = textureLoader.load(
+  "textures/grass/rocky_terrain_02_diff_2k.jpg"
+);
+
+const grassNormal = textureLoader.load(
+  "textures/grass/rocky_terrain_02_nor_gl_2k.png"
+);
+
+const grassRoughness = textureLoader.load(
+  "textures/grass/rocky_terrain_02_rough_2k.png"
+);
+
+const grassAO = textureLoader.load(
+  "textures/grass/rocky_terrain_02_ao_2k.png"
+);
+
+// Texture colour correction
+grassDiffuse.colorSpace = THREE.SRGBColorSpace;
+
+// Repeat textures across the island
+const terrainSize = WORLD.islandRadius * 2.35;
+const textureRepeat = terrainSize / 20;
+
+const terrainTextures = [
+  grassDiffuse,
+  grassNormal,
+  grassRoughness,
+  grassAO
+];
+
+for (const texture of terrainTextures) {
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+
+  texture.repeat.set(
+    textureRepeat,
+    textureRepeat
+  );
+
+  texture.anisotropy = 8;
+}
+
+// Extra UV channel for ambient occlusion
+terrainGeometry.setAttribute(
+  "uv1",
+  terrainGeometry.attributes.uv
+);
+
+// Create terrain material
 const terrainMaterial =
   new THREE.MeshStandardMaterial({
-    vertexColors: true,
+    map: grassDiffuse,
+    normalMap: grassNormal,
+    roughnessMap: grassRoughness,
+    aoMap: grassAO,
+
+    aoMapIntensity: 1,
+    normalScale: new THREE.Vector2(1, 1),
+
+    vertexColors: false,
     roughness: 1,
     metalness: 0,
+
     side: THREE.DoubleSide
   });
 
