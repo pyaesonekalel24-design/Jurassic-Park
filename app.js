@@ -379,7 +379,7 @@ function createIsland() {
 const textureLoader = new THREE.TextureLoader();
 
 const grassDiffuse = textureLoader.load(
-  "textures/grass/rocky_terrain_02_diff_2k.jpg"
+  "model/map/textures/rocky_terrain_02_diff_2k.jpg"
 );
 
 const grassNormal = textureLoader.load(
