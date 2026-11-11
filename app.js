@@ -1665,11 +1665,6 @@ function updatePhysics(deltaTime) {
       );
     }
 
-    // Update the downloaded model's animation.
-    if (item.mixer) {
-      item.mixer.update(deltaTime);
-    }
-
     // Sync visual dinosaur with physics rotation.
     const rotation = item.body.rotation();
 
@@ -1894,7 +1889,13 @@ function animate() {
     clock.getDelta(),
     0.1
   );
-
+   
+for (const item of physicsObjects) {
+  if (item.mixer) {
+    item.mixer.update(deltaTime);
+  }
+}
+   
   controls.update();
 
   updatePhysics(deltaTime);
