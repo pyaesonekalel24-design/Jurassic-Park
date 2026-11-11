@@ -1517,48 +1517,29 @@ model.traverse(function (child) {
   }
 });
 
-      // Load included animations.
-      if (gltf.animations.length > 0) {
-        const mixer =
-          new THREE.AnimationMixer(model);
+     
+// Create animation controller
+const mixer = new THREE.AnimationMixer(model);
 
-        gltf.animations.forEach(function (clip) {
-          console.log("Animation found:", clip.name);
-        });
+// Find the normal walking animation
+const walkClip = THREE.AnimationClip.findByName(
+  gltf.animations,
+  "walk loop"
+);
 
-        const action = mixer.clipAction(
-          gltf.animations[0]
-        );
+if (walkClip) {
+  const walkAction = mixer.clipAction(walkClip);
 
-        action.play();
+  walkAction.setLoop(THREE.LoopRepeat, Infinity);
+  walkAction.reset();
+  walkAction.play();
 
-        dinosaurData.mixer = mixer;
-      } else {
-        console.warn("No animations found in T-Rex model.");
-      }
+  dinosaurData.mixer = mixer;
+  dinosaurData.walkAction = walkAction;
 
-      console.log("T-Rex loaded successfully!");
-    },
-
-    undefined,
-
-    function (error) {
-      console.error("T-Rex loading failed:", error);
-
-      physicsWorld.removeRigidBody(body);
-      scene.remove(dinosaur);
-
-      const index = physicsObjects.indexOf(dinosaurData);
-
-      if (index !== -1) {
-        physicsObjects.splice(index, 1);
-      }
-
-      showToast("T-Rex model failed to load.");
-    }
-  );
-
-  showToast("A T-Rex has entered the island!");
+  console.log("Playing animation:", walkClip.name);
+} else {
+  console.error("Walk loop animation not found!");
 }
 
 /* =========================================================
@@ -1587,7 +1568,6 @@ function clearPhysicsObjects() {
 
   showToast("Dinosaurs cleared");
 }
-
 
 function updatePhysics(deltaTime) {
   accumulator += Math.min(deltaTime, 0.1);
@@ -1889,16 +1869,18 @@ function animate() {
     clock.getDelta(),
     0.1
   );
-   
-for (const item of physicsObjects) {
-  if (item.mixer) {
-    item.mixer.update(deltaTime);
-  }
-}
-   
+
   controls.update();
 
+  // Update physics first
   updatePhysics(deltaTime);
+
+  // Update dinosaur animations once per rendered frame
+  for (const item of physicsObjects) {
+    if (item.mixer) {
+      item.mixer.update(deltaTime);
+    }
+  }
 
   renderer.render(scene, camera);
 }
