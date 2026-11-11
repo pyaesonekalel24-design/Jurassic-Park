@@ -1456,6 +1456,19 @@ function spawnPhysicsObject(type) {
       
 const model = gltf.scene;
 
+console.log("=== T-REX ANIMATION LIST ===");
+
+gltf.animations.forEach((clip, index) => {
+  console.log(
+    index,
+    clip.name,
+    "Duration:",
+    clip.duration.toFixed(2) + " seconds"
+  );
+});
+
+console.log("Total animations:", gltf.animations.length);
+
 // Initial model scale.
 model.scale.setScalar(1);
 
