@@ -1447,7 +1447,7 @@ function spawnPhysicsObject(type) {
 
   const loader = new GLTFLoader();
 
-  const MODEL_PATH = "models/trex/scene.gltf";
+ const MODEL_PATH = "/Jurassic-Park/model/trex_new/t_rex-from_turok_with_all_animations.glb";
 
   loader.load(
     MODEL_PATH,
