@@ -1456,6 +1456,19 @@ function spawnPhysicsObject(type) {
       
 const model = gltf.scene;
 
+console.log("=== T-REX ANIMATION LIST ===");
+
+gltf.animations.forEach((clip, index) => {
+  console.log(
+    index,
+    clip.name,
+    "Duration:",
+    clip.duration.toFixed(2) + " seconds"
+  );
+});
+
+console.log("Total animations:", gltf.animations.length);
+
 // Initial model scale.
 model.scale.setScalar(1);
 
@@ -1650,11 +1663,6 @@ function updatePhysics(deltaTime) {
         },
         true
       );
-    }
-
-    // Update the downloaded model's animation.
-    if (item.mixer) {
-      item.mixer.update(deltaTime);
     }
 
     // Sync visual dinosaur with physics rotation.
@@ -1881,7 +1889,13 @@ function animate() {
     clock.getDelta(),
     0.1
   );
-
+   
+for (const item of physicsObjects) {
+  if (item.mixer) {
+    item.mixer.update(deltaTime);
+  }
+}
+   
   controls.update();
 
   updatePhysics(deltaTime);
