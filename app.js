@@ -270,10 +270,25 @@ function createIsland() {
 
   terrainGeometry.rotateX(-Math.PI / 2);
 
-  const positions =
-    terrainGeometry.attributes.position;
+const positions = terrainGeometry.attributes.position;
+const uvs = terrainGeometry.attributes.uv;
 
-  const colors = [];
+const textureTileSize = 20;
+
+for (let i = 0; i < positions.count; i++) {
+  const x = positions.getX(i);
+  const z = positions.getZ(i);
+
+  uvs.setXY(
+    i,
+    x / textureTileSize,
+    z / textureTileSize
+  );
+}
+
+uvs.needsUpdate = true;
+
+    const colors = [];
 
   originalTerrainHeights =
     new Float32Array(positions.count);
@@ -374,11 +389,73 @@ function createIsland() {
   terrainGeometry.computeVertexNormals();
   terrainGeometry.computeBoundingSphere();
 
+
+// TERRAIN TEXTURES
+const textureLoader = new THREE.TextureLoader();
+
+const grassDiffuse = textureLoader.load(
+  "/Jurassic-Park/model/map/textures/rocky_terrain_02_diff_2k.jpg"
+);
+
+const grassNormal = textureLoader.load(
+  "/Jurassic-Park/model/map/textures/rocky_terrain_02_nor_gl_2k.png"
+);
+
+const grassRoughness = textureLoader.load(
+  "/Jurassic-Park/model/map/textures/rocky_terrain_02_rough_2k.png"
+);
+
+const grassAO = textureLoader.load(
+  "/Jurassic-Park/model/map/textures/rocky_terrain_02_ao_2k.png"
+);
+
+// Texture colour correction
+grassDiffuse.colorSpace = THREE.SRGBColorSpace;
+
+// Repeat textures across the island
+const terrainSize = WORLD.islandRadius * 2.35;
+const textureRepeat = 1;
+
+const terrainTextures = [
+  grassDiffuse,
+  grassNormal,
+  grassRoughness,
+  grassAO
+];
+
+for (const texture of terrainTextures) {
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+
+  texture.repeat.set(
+    textureRepeat,
+    textureRepeat
+  );
+
+  texture.anisotropy = 8;
+}
+
+// Extra UV channel for ambient occlusion
+terrainGeometry.setAttribute(
+  "uv1",
+  terrainGeometry.attributes.uv
+);
+
+// Create terrain material
 const terrainMaterial =
   new THREE.MeshStandardMaterial({
-    vertexColors: true,
+    map: grassDiffuse,
+    normalMap: grassNormal,
+    roughnessMap: grassRoughness,
+    aoMap: grassAO,
+
+    aoMapIntensity: 1,
+    normalScale: new THREE.Vector2(1, 1),
+
+    vertexColors: false,
     roughness: 1,
     metalness: 0,
+
     side: THREE.DoubleSide
   });
 
@@ -387,8 +464,8 @@ const terrainMaterial =
     terrainMaterial
   );
 
-  terrainMesh.receiveShadow = true;
-  terrainMesh.castShadow = true;
+  terrainMesh.receiveShadow = false;
+  terrainMesh.castShadow = false;
 
   scene.add(terrainMesh);
 
@@ -564,26 +641,7 @@ function updateTerrainMesh() {
   const positions =
     terrainGeometry.attributes.position;
 
-  const colors =
-    terrainGeometry.attributes.color;
-
-  const color = new THREE.Color();
-
-  for (let i = 0; i < positions.count; i++) {
-    const height = positions.getY(i);
-
-    getTerrainColor(height, color);
-
-    colors.setXYZ(
-      i,
-      color.r,
-      color.g,
-      color.b
-    );
-  }
-
   positions.needsUpdate = true;
-  colors.needsUpdate = true;
 
   terrainGeometry.computeVertexNormals();
   terrainGeometry.computeBoundingSphere();
@@ -1389,7 +1447,7 @@ function spawnPhysicsObject(type) {
 
   const loader = new GLTFLoader();
 
-  const MODEL_PATH = "models/trex/scene.gltf";
+ const MODEL_PATH = "/Jurassic-Park/model/trex_new/t_rex-from_turok_with_all_animations.glb";
 
   loader.load(
     MODEL_PATH,
