@@ -1447,7 +1447,7 @@ function spawnPhysicsObject(type) {
 
   const loader = new GLTFLoader();
 
- const MODEL_PATH = "/Jurassic-Park/model/trex_new/t_rex-from_turok_with_all_animations.glb";
+  const MODEL_PATH = "models/trex/scene.gltf";
 
   loader.load(
     MODEL_PATH,
@@ -1455,19 +1455,6 @@ function spawnPhysicsObject(type) {
     function (gltf) {
       
 const model = gltf.scene;
-
-console.log("=== T-REX ANIMATION LIST ===");
-
-gltf.animations.forEach((clip, index) => {
-  console.log(
-    index,
-    clip.name,
-    "Duration:",
-    clip.duration.toFixed(2) + " seconds"
-  );
-});
-
-console.log("Total animations:", gltf.animations.length);
 
 // Initial model scale.
 model.scale.setScalar(1);
@@ -1517,29 +1504,48 @@ model.traverse(function (child) {
   }
 });
 
-     
-// Create animation controller
-const mixer = new THREE.AnimationMixer(model);
+      // Load included animations.
+      if (gltf.animations.length > 0) {
+        const mixer =
+          new THREE.AnimationMixer(model);
 
-// Find the normal walking animation
-const walkClip = THREE.AnimationClip.findByName(
-  gltf.animations,
-  "walk loop"
-);
+        gltf.animations.forEach(function (clip) {
+          console.log("Animation found:", clip.name);
+        });
 
-if (walkClip) {
-  const walkAction = mixer.clipAction(walkClip);
+        const action = mixer.clipAction(
+          gltf.animations[0]
+        );
 
-  walkAction.setLoop(THREE.LoopRepeat, Infinity);
-  walkAction.reset();
-  walkAction.play();
+        action.play();
 
-  dinosaurData.mixer = mixer;
-  dinosaurData.walkAction = walkAction;
+        dinosaurData.mixer = mixer;
+      } else {
+        console.warn("No animations found in T-Rex model.");
+      }
 
-  console.log("Playing animation:", walkClip.name);
-} else {
-  console.error("Walk loop animation not found!");
+      console.log("T-Rex loaded successfully!");
+    },
+
+    undefined,
+
+    function (error) {
+      console.error("T-Rex loading failed:", error);
+
+      physicsWorld.removeRigidBody(body);
+      scene.remove(dinosaur);
+
+      const index = physicsObjects.indexOf(dinosaurData);
+
+      if (index !== -1) {
+        physicsObjects.splice(index, 1);
+      }
+
+      showToast("T-Rex model failed to load.");
+    }
+  );
+
+  showToast("A T-Rex has entered the island!");
 }
 
 /* =========================================================
@@ -1568,6 +1574,7 @@ function clearPhysicsObjects() {
 
   showToast("Dinosaurs cleared");
 }
+
 
 function updatePhysics(deltaTime) {
   accumulator += Math.min(deltaTime, 0.1);
@@ -1643,6 +1650,11 @@ function updatePhysics(deltaTime) {
         },
         true
       );
+    }
+
+    // Update the downloaded model's animation.
+    if (item.mixer) {
+      item.mixer.update(deltaTime);
     }
 
     // Sync visual dinosaur with physics rotation.
@@ -1872,15 +1884,7 @@ function animate() {
 
   controls.update();
 
-  // Update physics first
   updatePhysics(deltaTime);
-
-  // Update dinosaur animations once per rendered frame
-  for (const item of physicsObjects) {
-    if (item.mixer) {
-      item.mixer.update(deltaTime);
-    }
-  }
 
   renderer.render(scene, camera);
 }
